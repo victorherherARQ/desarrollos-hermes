@@ -1,0 +1,192 @@
+{
+  "metodologia": "Tres analisis de memoria: (1) runs test sobre secuencia binaria por numero, (2) autocorrelacion de suma con lags 1-10, (3) autocorrelacion binaria por numero en lag 1, (4) Markov orden 1 sobre suma categorizada.",
+  "runs_test": {
+    "n_elementos_testeados": 50,
+    "n_con_patron_p005": 4,
+    "elementos_significativos": [
+      {
+        "n_sorteos": 1951,
+        "n_apariciones": 192,
+        "n_rachas_observadas": 363,
+        "n_rachas_esperadas": 347.2101486417222,
+        "z_stat": 2.0168967805959452,
+        "p_value": 0.04370628612098115,
+        "hay_patron_rachas": true,
+        "interpretacion": "mas rachas=z<0 (alternancia), menos rachas=z>0 (agrupacion)",
+        "elemento": 6
+      },
+      {
+        "n_sorteos": 1951,
+        "n_apariciones": 194,
+        "n_rachas_observadas": 331,
+        "n_rachas_esperadas": 350.41875961045616,
+        "z_stat": -2.4576210445113045,
+        "p_value": 0.013986066939878139,
+        "hay_patron_rachas": true,
+        "interpretacion": "mas rachas=z<0 (alternancia), menos rachas=z>0 (agrupacion)",
+        "elemento": 30
+      },
+      {
+        "n_sorteos": 1951,
+        "n_apariciones": 170,
+        "n_rachas_observadas": 326,
+        "n_rachas_esperadas": 311.37416709379806,
+        "z_stat": 2.0842658177063003,
+        "p_value": 0.0371359947935348,
+        "hay_patron_rachas": true,
+        "interpretacion": "mas rachas=z<0 (alternancia), menos rachas=z>0 (agrupacion)",
+        "elemento": 33
+      },
+      {
+        "n_sorteos": 1951,
+        "n_apariciones": 182,
+        "n_rachas_observadas": 316,
+        "n_rachas_esperadas": 331.0440799589954,
+        "z_stat": -2.0159043609537197,
+        "p_value": 0.04380997752163118,
+        "hay_patron_rachas": true,
+        "interpretacion": "mas rachas=z<0 (alternancia), menos rachas=z>0 (agrupacion)",
+        "elemento": 41
+      }
+    ]
+  },
+  "autocorr_suma": [
+    {
+      "lag": 1,
+      "autocorrelacion": 0.017255263133250095,
+      "z_stat": 0.7619717883921391,
+      "p_value": 0.4460768420368453,
+      "significativo": false
+    },
+    {
+      "lag": 2,
+      "autocorrelacion": 0.011202260612926838,
+      "z_stat": 0.4945515775882506,
+      "p_value": 0.6209166899979757,
+      "significativo": false
+    },
+    {
+      "lag": 3,
+      "autocorrelacion": -0.019409219547980004,
+      "z_stat": -0.8566482832197647,
+      "p_value": 0.39163929302033207,
+      "significativo": false
+    },
+    {
+      "lag": 4,
+      "autocorrelacion": -0.015886261924841858,
+      "z_stat": -0.7009784947045753,
+      "p_value": 0.4833164361329536,
+      "significativo": false
+    },
+    {
+      "lag": 5,
+      "autocorrelacion": -0.03286493426367103,
+      "z_stat": -1.449786948998522,
+      "p_value": 0.14711794004026757,
+      "significativo": false
+    },
+    {
+      "lag": 6,
+      "autocorrelacion": 0.015793948143783397,
+      "z_stat": 0.696547135554206,
+      "p_value": 0.4860862492072111,
+      "significativo": false
+    },
+    {
+      "lag": 7,
+      "autocorrelacion": 0.0012046782725742505,
+      "z_stat": 0.05311524729643891,
+      "p_value": 0.9576400830160028,
+      "significativo": false
+    },
+    {
+      "lag": 8,
+      "autocorrelacion": 0.010536506058908138,
+      "z_stat": 0.46444364151405876,
+      "p_value": 0.6423299290186153,
+      "significativo": false
+    },
+    {
+      "lag": 9,
+      "autocorrelacion": 0.03474235631002533,
+      "z_stat": 1.5310306421724855,
+      "p_value": 0.12576181970634126,
+      "significativo": false
+    },
+    {
+      "lag": 10,
+      "autocorrelacion": 0.025183123212957514,
+      "z_stat": 1.1094873579844065,
+      "p_value": 0.26721999515169825,
+      "significativo": false
+    }
+  ],
+  "autocorr_por_numero": {
+    "media": -9.232292957102154e-05,
+    "max": 0.055520982551722955,
+    "min": -0.049967954065877854,
+    "top5_positivo": [
+      {
+        "elemento": 30,
+        "apariciones": 194,
+        "autocorr_lag1": 0.055520982551722955
+      },
+      {
+        "elemento": 47,
+        "apariciones": 181,
+        "autocorr_lag1": 0.043845978468967144
+      },
+      {
+        "elemento": 41,
+        "apariciones": 182,
+        "autocorr_lag1": 0.043173825193437994
+      },
+      {
+        "elemento": 28,
+        "apariciones": 186,
+        "autocorr_lag1": 0.04313876088069641
+      },
+      {
+        "elemento": 39,
+        "apariciones": 191,
+        "autocorr_lag1": 0.04232235712223447
+      }
+    ],
+    "top5_negativo": [
+      {
+        "elemento": 33,
+        "apariciones": 170,
+        "autocorr_lag1": -0.049967954065877854
+      },
+      {
+        "elemento": 6,
+        "apariciones": 192,
+        "autocorr_lag1": -0.045666240045506436
+      },
+      {
+        "elemento": 29,
+        "apariciones": 217,
+        "autocorr_lag1": -0.04175840024228326
+      },
+      {
+        "elemento": 26,
+        "apariciones": 204,
+        "autocorr_lag1": -0.04019270938615985
+      },
+      {
+        "elemento": 25,
+        "apariciones": 204,
+        "autocorr_lag1": -0.04019270938615974
+      }
+    ]
+  },
+  "markov_suma": {
+    "n_bins": 5,
+    "n_transiciones": 1950,
+    "chi2": 9.82959161875772,
+    "p_value": 0.875374562126369,
+    "dof": 16,
+    "hay_memoria": "False"
+  }
+}

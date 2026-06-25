@@ -1,0 +1,4 @@
+# Windows agent no necesita paquetes externos - solo stdlib de Python 3.8+
+# (Standard library: http.server, subprocess, json, etc.)
+# Pero por si quieres usar waitress en producción:
+# waitress==3.0.0

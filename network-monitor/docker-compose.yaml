@@ -1,0 +1,101 @@
+name: network-monitor
+
+services:
+  # ============================================================
+  # PROMETHEUS — almacén de series temporales
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: nm-prometheus
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    depends_on:
+      - node-exporter
+
+  # ============================================================
+  # NODE EXPORTER — métricas del host (CPU, RAM, disco, red)
+  # ============================================================
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: nm-node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($$|/)'
+    volumes:
+      - /:/host:ro
+
+  # ============================================================
+  # GRAFANA — dashboards
+  # ============================================================
+  grafana:
+    image: grafana/grafana-oss:11.3.0
+    container_name: nm-grafana
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # ============================================================
+  # LAN SCANNER (custom) — descubrimiento + speedtest + API + UI
+  # ============================================================
+  lan-scanner:
+    build: ./lan-scanner
+    container_name: nm-lan-scanner
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_RAW      # necesario para ARP
+      - NET_ADMIN    # necesario para nmap
+    environment:
+      - SCAN_SUBNET=${SCAN_SUBNET:-192.168.1.0/24}
+      - SCAN_INTERVAL_SECONDS=${SCAN_INTERVAL_SECONDS:-300}
+      - SPEEDTEST_INTERVAL_MINUTES=${SPEEDTEST_INTERVAL_MINUTES:-30}
+    volumes:
+      - ./lan-scanner/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # ALERTMANAGER — avisos a Telegram/email
+  # ============================================================
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: nm-alertmanager
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Monitor</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>🌐 Network Monitor</h1>
+    <div class="status">
+      <span id="stats-total">—</span> dispositivos
+      (<span id="stats-online">—</span> online)
+      · última act. <span id="last-refresh">—</span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-tab="devices">Dispositivos</button>
+    <button class="tab" data-tab="speedtest">Velocidad</button>
+    <button class="tab" data-tab="new">Nuevos (24h)</button>
+  </nav>
+
+  <main>
+    <!-- ============== Dispositivos ============== -->
+    <section id="tab-devices" class="tab-content active">
+      <div class="filters">
+        <label><input type="checkbox" id="filter-online" checked> Solo online</label>
+        <input type="text" id="filter-text" placeholder="Buscar por IP, MAC, vendor, hostname...">
+      </div>
+      <table id="devices-table">
+        <thead>
+          <tr>
+            <th>Estado</th>
+            <th>IP</th>
+            <th>MAC</th>
+            <th>Vendor</th>
+            <th>Hostname</th>
+            <th>Última vez visto</th>
+            <th>Primera vez</th>
+            <th>#</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- ============== Speedtest ============== -->
+    <section id="tab-speedtest" class="tab-content">
+      <div class="speedtest-summary">
+        <div class="card">
+          <div class="label">Última descarga</div>
+          <div class="value" id="sp-dl">—</div>
+          <div class="unit">Mbps</div>
+        </div>
+        <div class="card">
+          <div class="label">Última subida</div>
+          <div class="value" id="sp-up">—</div>
+          <div class="unit">Mbps</div>
+        </div>
+        <div class="card">
+          <div class="label">Último ping</div>
+          <div class="value" id="sp-ping">—</div>
+          <div class="unit">ms</div>
+        </div>
+      </div>
+      <canvas id="chart-speedtest" height="80"></canvas>
+      <div class="info">
+        Mediciones cada <strong>30 min</strong>. Histórico: 7 días.
+      </div>
+    </section>
+
+    <!-- ============== Nuevos 24h ============== -->
+    <section id="tab-new" class="tab-content">
+      <div class="info" style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+        ⚠️ Dispositivos vistos por primera vez en las últimas 24 horas.
+        Si no los reconoces, revisa tu red.
+      </div>
+      <table id="new-table">
+        <thead>
+          <tr>
+            <th>IP</th><th>MAC</th><th>Vendor</th><th>Hostname</th><th>Primera vez</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer>
+    <a href="http://localhost:3000" target="_blank">Grafana</a> ·
+    <a href="http://localhost:9090" target="_blank">Prometheus</a> ·
+    <a href="/docs" target="_blank">API</a>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

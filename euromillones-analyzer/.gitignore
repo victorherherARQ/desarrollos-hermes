@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.ipynb_checkpoints/
+data/raw/*.csv
+.DS_Store
+*.log
+reports/graficos/*.png
+reports/graficos/*.pdf

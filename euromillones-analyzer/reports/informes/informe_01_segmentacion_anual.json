@@ -1,0 +1,481 @@
+{
+  "metodologia": "Segmentacion en 5 bloques temporales. Para cada bloque: chi\u00b2 por elemento. Ademas: test de homogeneidad chi\u00b2 entre todos los bloques, y test 2024-2026 vs resto.",
+  "bloques": [
+    [
+      "2004-2008",
+      2004,
+      2008
+    ],
+    [
+      "2009-2013",
+      2009,
+      2013
+    ],
+    [
+      "2014-2018",
+      2014,
+      2018
+    ],
+    [
+      "2019-2023",
+      2019,
+      2023
+    ],
+    [
+      "2024-2026",
+      2024,
+      2026
+    ]
+  ],
+  "summary_por_bloque": {
+    "2004-2008": {
+      "n": 254,
+      "top_numeros": [
+        {
+          "elemento": 50,
+          "observado": 43,
+          "esperado": 25.4,
+          "desviacion_%": 69.29133858267717,
+          "chi2": 12.195275590551184,
+          "p_value": 0.0004791069739342735
+        },
+        {
+          "elemento": 46,
+          "observado": 12,
+          "esperado": 25.4,
+          "desviacion_%": -52.75590551181102,
+          "chi2": 7.069291338582676,
+          "p_value": 0.007841626510318389
+        },
+        {
+          "elemento": 28,
+          "observado": 16,
+          "esperado": 25.4,
+          "desviacion_%": -37.00787401574803,
+          "chi2": 3.478740157480314,
+          "p_value": 0.06216204835782002
+        },
+        {
+          "elemento": 37,
+          "observado": 34,
+          "esperado": 25.4,
+          "desviacion_%": 33.85826771653544,
+          "chi2": 2.9118110236220485,
+          "p_value": 0.08793308197099348
+        },
+        {
+          "elemento": 19,
+          "observado": 33,
+          "esperado": 25.4,
+          "desviacion_%": 29.921259842519692,
+          "chi2": 2.274015748031497,
+          "p_value": 0.13155862173995891
+        }
+      ],
+      "top_estrellas": [
+        {
+          "elemento": 12,
+          "observado": 0,
+          "esperado": 42.333333333333336,
+          "desviacion_%": -100.0,
+          "chi2": 42.333333333333336,
+          "p_value": 7.696943082891039e-11
+        },
+        {
+          "elemento": 10,
+          "observado": 0,
+          "esperado": 42.333333333333336,
+          "desviacion_%": -100.0,
+          "chi2": 42.333333333333336,
+          "p_value": 7.696943082891039e-11
+        },
+        {
+          "elemento": 11,
+          "observado": 0,
+          "esperado": 42.333333333333336,
+          "desviacion_%": -100.0,
+          "chi2": 42.333333333333336,
+          "p_value": 7.696943082891039e-11
+        },
+        {
+          "elemento": 5,
+          "observado": 62,
+          "esperado": 42.333333333333336,
+          "desviacion_%": 46.456692913385815,
+          "chi2": 9.136482939632543,
+          "p_value": 0.002505622900198956
+        },
+        {
+          "elemento": 6,
+          "observado": 62,
+          "esperado": 42.333333333333336,
+          "desviacion_%": 46.456692913385815,
+          "chi2": 9.136482939632543,
+          "p_value": 0.002505622900198956
+        }
+      ]
+    },
+    "2009-2013": {
+      "n": 400,
+      "top_numeros": [
+        {
+          "elemento": 8,
+          "observado": 28,
+          "esperado": 40.0,
+          "desviacion_%": -30.0,
+          "chi2": 3.6,
+          "p_value": 0.05777957112359711
+        },
+        {
+          "elemento": 4,
+          "observado": 52,
+          "esperado": 40.0,
+          "desviacion_%": 30.0,
+          "chi2": 3.6,
+          "p_value": 0.05777957112359711
+        },
+        {
+          "elemento": 32,
+          "observado": 29,
+          "esperado": 40.0,
+          "desviacion_%": -27.500000000000004,
+          "chi2": 3.025,
+          "p_value": 0.08199032100038262
+        },
+        {
+          "elemento": 2,
+          "observado": 30,
+          "esperado": 40.0,
+          "desviacion_%": -25.0,
+          "chi2": 2.5,
+          "p_value": 0.11384629800665769
+        },
+        {
+          "elemento": 28,
+          "observado": 50,
+          "esperado": 40.0,
+          "desviacion_%": 25.0,
+          "chi2": 2.5,
+          "p_value": 0.11384629800665769
+        }
+      ],
+      "top_estrellas": [
+        {
+          "elemento": 12,
+          "observado": 0,
+          "esperado": 66.66666666666667,
+          "desviacion_%": -100.0,
+          "chi2": 66.66666666666667,
+          "p_value": 3.3306690738754696e-16
+        },
+        {
+          "elemento": 2,
+          "observado": 91,
+          "esperado": 66.66666666666667,
+          "desviacion_%": 36.499999999999986,
+          "chi2": 8.881666666666662,
+          "p_value": 0.002880484669027128
+        },
+        {
+          "elemento": 5,
+          "observado": 85,
+          "esperado": 66.66666666666667,
+          "desviacion_%": 27.499999999999993,
+          "chi2": 5.041666666666663,
+          "p_value": 0.024744672046399074
+        },
+        {
+          "elemento": 11,
+          "observado": 50,
+          "esperado": 66.66666666666667,
+          "desviacion_%": -25.000000000000007,
+          "chi2": 4.166666666666669,
+          "p_value": 0.04122683333716359
+        },
+        {
+          "elemento": 3,
+          "observado": 83,
+          "esperado": 66.66666666666667,
+          "desviacion_%": 24.499999999999993,
+          "chi2": 4.001666666666663,
+          "p_value": 0.045455294849058414
+        }
+      ]
+    },
+    "2014-2018": {
+      "n": 516,
+      "top_numeros": [
+        {
+          "elemento": 22,
+          "observado": 36,
+          "esperado": 51.6,
+          "desviacion_%": -30.232558139534888,
+          "chi2": 4.716279069767443,
+          "p_value": 0.0298783301711415
+        },
+        {
+          "elemento": 17,
+          "observado": 66,
+          "esperado": 51.6,
+          "desviacion_%": 27.90697674418604,
+          "chi2": 4.018604651162789,
+          "p_value": 0.04500093017587348
+        },
+        {
+          "elemento": 41,
+          "observado": 38,
+          "esperado": 51.6,
+          "desviacion_%": -26.356589147286826,
+          "chi2": 3.5844961240310083,
+          "p_value": 0.05832110095006526
+        },
+        {
+          "elemento": 47,
+          "observado": 38,
+          "esperado": 51.6,
+          "desviacion_%": -26.356589147286826,
+          "chi2": 3.5844961240310083,
+          "p_value": 0.05832110095006526
+        },
+        {
+          "elemento": 33,
+          "observado": 39,
+          "esperado": 51.6,
+          "desviacion_%": -24.41860465116279,
+          "chi2": 3.0767441860465126,
+          "p_value": 0.07941936215366951
+        }
+      ],
+      "top_estrellas": [
+        {
+          "elemento": 12,
+          "observado": 45,
+          "esperado": 86.0,
+          "desviacion_%": -47.674418604651166,
+          "chi2": 19.546511627906977,
+          "p_value": 9.817985054616507e-06
+        },
+        {
+          "elemento": 8,
+          "observado": 107,
+          "esperado": 86.0,
+          "desviacion_%": 24.418604651162788,
+          "chi2": 5.127906976744186,
+          "p_value": 0.02354410241255278
+        },
+        {
+          "elemento": 9,
+          "observado": 101,
+          "esperado": 86.0,
+          "desviacion_%": 17.441860465116278,
+          "chi2": 2.616279069767442,
+          "p_value": 0.10577220785075225
+        },
+        {
+          "elemento": 6,
+          "observado": 73,
+          "esperado": 86.0,
+          "desviacion_%": -15.11627906976744,
+          "chi2": 1.9651162790697674,
+          "p_value": 0.1609671969711517
+        },
+        {
+          "elemento": 10,
+          "observado": 97,
+          "esperado": 86.0,
+          "desviacion_%": 12.790697674418606,
+          "chi2": 1.4069767441860466,
+          "p_value": 0.2355589199240795
+        }
+      ]
+    },
+    "2019-2023": {
+      "n": 522,
+      "top_numeros": [
+        {
+          "elemento": 4,
+          "observado": 35,
+          "esperado": 52.2,
+          "desviacion_%": -32.95019157088123,
+          "chi2": 5.667432950191572,
+          "p_value": 0.017282729030549948
+        },
+        {
+          "elemento": 22,
+          "observado": 35,
+          "esperado": 52.2,
+          "desviacion_%": -32.95019157088123,
+          "chi2": 5.667432950191572,
+          "p_value": 0.017282729030549948
+        },
+        {
+          "elemento": 21,
+          "observado": 69,
+          "esperado": 52.2,
+          "desviacion_%": 32.183908045977006,
+          "chi2": 5.406896551724135,
+          "p_value": 0.020057343780978343
+        },
+        {
+          "elemento": 34,
+          "observado": 66,
+          "esperado": 52.2,
+          "desviacion_%": 26.436781609195396,
+          "chi2": 3.6482758620689637,
+          "p_value": 0.05612728611793916
+        },
+        {
+          "elemento": 42,
+          "observado": 65,
+          "esperado": 52.2,
+          "desviacion_%": 24.52107279693486,
+          "chi2": 3.138697318007661,
+          "p_value": 0.07645484967166671
+        }
+      ],
+      "top_estrellas": [
+        {
+          "elemento": 2,
+          "observado": 108,
+          "esperado": 87.0,
+          "desviacion_%": 24.137931034482758,
+          "chi2": 5.068965517241379,
+          "p_value": 0.024357915718037026
+        },
+        {
+          "elemento": 6,
+          "observado": 106,
+          "esperado": 87.0,
+          "desviacion_%": 21.839080459770116,
+          "chi2": 4.149425287356322,
+          "p_value": 0.04164865748904789
+        },
+        {
+          "elemento": 3,
+          "observado": 104,
+          "esperado": 87.0,
+          "desviacion_%": 19.54022988505747,
+          "chi2": 3.32183908045977,
+          "p_value": 0.06836531288935421
+        },
+        {
+          "elemento": 4,
+          "observado": 72,
+          "esperado": 87.0,
+          "desviacion_%": -17.24137931034483,
+          "chi2": 2.586206896551724,
+          "p_value": 0.10779821387741029
+        },
+        {
+          "elemento": 5,
+          "observado": 72,
+          "esperado": 87.0,
+          "desviacion_%": -17.24137931034483,
+          "chi2": 2.586206896551724,
+          "p_value": 0.10779821387741029
+        }
+      ]
+    },
+    "2024-2026": {
+      "n": 259,
+      "top_numeros": [
+        {
+          "elemento": 38,
+          "observado": 15,
+          "esperado": 25.9,
+          "desviacion_%": -42.084942084942085,
+          "chi2": 4.587258687258687,
+          "p_value": 0.032210491933379104
+        },
+        {
+          "elemento": 13,
+          "observado": 35,
+          "esperado": 25.9,
+          "desviacion_%": 35.135135135135144,
+          "chi2": 3.1972972972972986,
+          "p_value": 0.07376007015365638
+        },
+        {
+          "elemento": 43,
+          "observado": 17,
+          "esperado": 25.9,
+          "desviacion_%": -34.36293436293436,
+          "chi2": 3.0583011583011577,
+          "p_value": 0.08032561074102318
+        },
+        {
+          "elemento": 29,
+          "observado": 34,
+          "esperado": 25.9,
+          "desviacion_%": 31.274131274131285,
+          "chi2": 2.5332046332046345,
+          "p_value": 0.11147361608182216
+        },
+        {
+          "elemento": 41,
+          "observado": 34,
+          "esperado": 25.9,
+          "desviacion_%": 31.274131274131285,
+          "chi2": 2.5332046332046345,
+          "p_value": 0.11147361608182216
+        }
+      ],
+      "top_estrellas": [
+        {
+          "elemento": 11,
+          "observado": 30,
+          "esperado": 43.166666666666664,
+          "desviacion_%": -30.501930501930495,
+          "chi2": 4.016087516087515,
+          "p_value": 0.0450681490747844
+        },
+        {
+          "elemento": 5,
+          "observado": 52,
+          "esperado": 43.166666666666664,
+          "desviacion_%": 20.46332046332047,
+          "chi2": 1.8075933075933086,
+          "p_value": 0.17879720513898922
+        },
+        {
+          "elemento": 4,
+          "observado": 35,
+          "esperado": 43.166666666666664,
+          "desviacion_%": -18.918918918918916,
+          "chi2": 1.5450450450450441,
+          "p_value": 0.21386841970991266
+        },
+        {
+          "elemento": 12,
+          "observado": 50,
+          "esperado": 43.166666666666664,
+          "desviacion_%": 15.830115830115837,
+          "chi2": 1.0817245817245826,
+          "p_value": 0.2983120754438151
+        },
+        {
+          "elemento": 9,
+          "observado": 49,
+          "esperado": 43.166666666666664,
+          "desviacion_%": 13.51351351351352,
+          "chi2": 0.788288288288289,
+          "p_value": 0.37461821185558086
+        }
+      ]
+    }
+  },
+  "homogeneidad_numeros": {
+    "chi2": 191.26344649022445,
+    "p_value": 0.5821663228888914,
+    "dof": 196,
+    "significativo_p005": "False",
+    "significativo_p001": "False"
+  },
+  "homogeneidad_estrellas": {
+    "chi2": 275.5745582494234,
+    "p_value": 2.792229963219016e-35,
+    "dof": 44,
+    "significativo_p005": "True",
+    "significativo_p001": "True"
+  }
+}

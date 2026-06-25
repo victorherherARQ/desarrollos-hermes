@@ -1,0 +1,44 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "Speedtest History",
+  "uid": "speedtest",
+  "schemaVersion": 39,
+  "tags": ["speedtest", "internet"],
+  "timezone": "browser",
+  "refresh": "1h",
+  "time": {"from": "now-7d", "to": "now"},
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Velocidad de descarga (Mbps)",
+      "id": 1,
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {"expr": "lan_scanner_download_bps / 1e6", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "decmbytes"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Velocidad de subida (Mbps)",
+      "id": 2,
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {"expr": "lan_scanner_upload_bps / 1e6", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "decmbytes"}}
+    },
+    {
+      "type": "timeseries",
+      "title": "Latencia (ms)",
+      "id": 3,
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 9},
+      "targets": [
+        {"expr": "lan_scanner_ping_ms", "refId": "A"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms"}}
+    }
+  ]
+}

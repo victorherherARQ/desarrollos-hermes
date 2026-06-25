@@ -1,0 +1,73 @@
+{
+  "metodologia": "6 tests formales de aleatoriedad: chi\u00b2 omnibus, KS contra uniforme y normal, Mann-Whitney primera/segunda mitad, Bartels (variacion de runs), Poker test (verifica no-repetidos), Entropia de Shannon.",
+  "chi2_omnibus": {
+    "numeros": {
+      "elemento": "numero",
+      "chi2": 52.109174782162995,
+      "dof": 49,
+      "p_value": 0.3539316200587159,
+      "rechaza_aleatoriedad": "False"
+    },
+    "estrellas": {
+      "elemento": "estrella",
+      "chi2": 128.35776524859045,
+      "dof": 11,
+      "p_value": 0.0,
+      "rechaza_aleatoriedad": "True"
+    }
+  },
+  "ks_test": {
+    "test": "KS contra uniforme",
+    "ks_stat": 0.0154433623782676,
+    "p_value": 0.018866361336093138,
+    "rechaza_aleatoriedad": "False"
+  },
+  "ks_sumas": {
+    "test": "KS suma vs normal",
+    "ks_stat": 0.023449616333929058,
+    "p_value": 0.2299991913559163,
+    "rechaza_aleatoriedad": "False"
+  },
+  "mann_whitney": {
+    "test": "Mann-Whitney primera mitad vs segunda",
+    "u_stat": 457371.5,
+    "p_value": 0.13854127170746824,
+    "rechaza_igualdad": "False"
+  },
+  "bartels": {
+    "test": "Bartels (variacion de runs)",
+    "R_stat": 0.037684487070070036,
+    "z_stat": -61.28899133665409,
+    "p_value": 0.0,
+    "rechaza_aleatoriedad": "True"
+  },
+  "poker": {
+    "test": "Poker (verifica no-repetidos)",
+    "conteo_categorias": {
+      "5_distintos": 1951
+    },
+    "total_sorteos": 1951,
+    "interpretacion": "Todos los sorteos deben ser 5_distintos por diseno"
+  },
+  "shannon": {
+    "numeros": {
+      "elemento": "numero",
+      "H_observada_bits": 5.6399660403736815,
+      "H_maxima_bits": 5.643856189774724,
+      "eficiencia_%": 99.93107284682252,
+      "interpretacion": "100% = totalmente aleatorio, <95% = estructura detectable"
+    },
+    "estrellas": {
+      "elemento": "estrella",
+      "H_observada_bits": 3.5586624669673053,
+      "H_maxima_bits": 3.584962500721156,
+      "eficiencia_%": 99.26637911139767,
+      "interpretacion": "100% = totalmente aleatorio, <95% = estructura detectable"
+    }
+  },
+  "veredicto": {
+    "tests_rechazan": "2",
+    "total_tests": 6,
+    "consistente_con_azar": "False"
+  }
+}

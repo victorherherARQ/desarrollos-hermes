@@ -1,0 +1,148 @@
+{
+  "metodologia": "Ventanas moviles de 200 sorteos con step 50. Para cada ventana: max desviacion chi\u00b2 por numero y estrella. Ademas: evolucion de suma media y t-test primera vs segunda mitad.",
+  "n_ventanas": 36,
+  "ventanas_top_numeros": [
+    {
+      "indice_inicio": 50,
+      "indice_fin": 249,
+      "fecha_inicio": "2005-01-28",
+      "fecha_fin": "2008-11-28",
+      "n_sorteos": 200,
+      "num_max_desv_%": 80.0,
+      "num_max_desv_elem": 50,
+      "num_max_chi2": 12.8,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 1550,
+      "indice_fin": 1749,
+      "fecha_inicio": "2022-08-23",
+      "fecha_fin": "2024-07-19",
+      "n_sorteos": 200,
+      "num_max_desv_%": 70.0,
+      "num_max_desv_elem": 35,
+      "num_max_chi2": 9.8,
+      "star_max_desv_%": 37.999999999999986,
+      "star_max_desv_elem": 3,
+      "star_max_chi2": 4.813333333333331
+    },
+    {
+      "indice_inicio": 100,
+      "indice_fin": 299,
+      "fecha_inicio": "2006-01-20",
+      "fecha_fin": "2009-11-06",
+      "n_sorteos": 200,
+      "num_max_desv_%": 65.0,
+      "num_max_desv_elem": 50,
+      "num_max_chi2": 8.45,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 500,
+      "indice_fin": 699,
+      "fecha_inicio": "2012-07-17",
+      "fecha_fin": "2014-06-13",
+      "n_sorteos": 200,
+      "num_max_desv_%": 65.0,
+      "num_max_desv_elem": 44,
+      "num_max_chi2": 8.45,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 12,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 1400,
+      "indice_fin": 1599,
+      "fecha_inicio": "2021-03-16",
+      "fecha_fin": "2023-02-10",
+      "n_sorteos": 200,
+      "num_max_desv_%": 65.0,
+      "num_max_desv_elem": 21,
+      "num_max_chi2": 8.45,
+      "star_max_desv_%": 46.99999999999999,
+      "star_max_desv_elem": 3,
+      "star_max_chi2": 7.363333333333331
+    }
+  ],
+  "ventanas_top_estrellas": [
+    {
+      "indice_inicio": 0,
+      "indice_fin": 199,
+      "fecha_inicio": "2004-02-13",
+      "fecha_fin": "2007-12-14",
+      "n_sorteos": 200,
+      "num_max_desv_%": -60.0,
+      "num_max_desv_elem": 46,
+      "num_max_chi2": 7.2,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 50,
+      "indice_fin": 249,
+      "fecha_inicio": "2005-01-28",
+      "fecha_fin": "2008-11-28",
+      "n_sorteos": 200,
+      "num_max_desv_%": 80.0,
+      "num_max_desv_elem": 50,
+      "num_max_chi2": 12.8,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 100,
+      "indice_fin": 299,
+      "fecha_inicio": "2006-01-20",
+      "fecha_fin": "2009-11-06",
+      "n_sorteos": 200,
+      "num_max_desv_%": 65.0,
+      "num_max_desv_elem": 50,
+      "num_max_chi2": 8.45,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 150,
+      "indice_fin": 349,
+      "fecha_inicio": "2007-01-05",
+      "fecha_fin": "2010-11-05",
+      "n_sorteos": 200,
+      "num_max_desv_%": -50.0,
+      "num_max_desv_elem": 28,
+      "num_max_chi2": 5.0,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 10,
+      "star_max_chi2": 33.333333333333336
+    },
+    {
+      "indice_inicio": 200,
+      "indice_fin": 399,
+      "fecha_inicio": "2007-12-21",
+      "fecha_fin": "2011-07-29",
+      "n_sorteos": 200,
+      "num_max_desv_%": 50.0,
+      "num_max_desv_elem": 50,
+      "num_max_chi2": 5.0,
+      "star_max_desv_%": -100.0,
+      "star_max_desv_elem": 12,
+      "star_max_chi2": 33.333333333333336
+    }
+  ],
+  "suma_media_global": 127.48949256791389,
+  "rango_sumas_ventanas": [
+    123.86,
+    131.135
+  ],
+  "t_test_primera_vs_segunda_mitad": {
+    "t_stat": -2.023597147714048,
+    "p_value": 0.05092863022142531,
+    "significativo": "False"
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "n_sorteos_total": 1951,
+  "year_split": 2021,
+  "n_train": 1379,
+  "n_test": 572,
+  "patrones_train_sin_correccion": 9,
+  "n_bonferroni": "3",
+  "n_fdr": "6",
+  "n_holm": "3",
+  "supervivientes": [
+    {
+      "tipo": "estrella",
+      "elemento": 2.0,
+      "p_train": 0.00035299700100765996,
+      "desviacion_%": 23.56780275562001,
+      "correccion": "bonferroni"
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 3.0,
+      "p_train": 0.002889252570382861,
+      "desviacion_%": 19.651921682378532,
+      "correccion": "fdr_bh"
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 8.0,
+      "p_train": 0.0018632531699122046,
+      "desviacion_%": 20.522117476432193,
+      "correccion": "fdr_bh"
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 10.0,
+      "p_train": 0.0010122348361492062,
+      "desviacion_%": -21.682378535170415,
+      "correccion": "fdr_bh"
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 11.0,
+      "p_train": 0.00017765611318698582,
+      "desviacion_%": -24.728063814358233,
+      "correccion": "bonferroni"
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 12.0,
+      "p_train": 0.0,
+      "desviacion_%": -67.36765772298767,
+      "correccion": "bonferroni"
+    }
+  ],
+  "backtest": [
+    {
+      "tipo": "estrella",
+      "elemento": 2.0,
+      "desviacion_train_%": 23.56780275562001,
+      "observado_test": 104,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": 9.090909090909097,
+      "p_test": 0.37474230509410544,
+      "se_confirma_direccion": true
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 3.0,
+      "desviacion_train_%": 19.651921682378532,
+      "observado_test": 107,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": 12.237762237762244,
+      "p_test": 0.23213380137204798,
+      "se_confirma_direccion": true
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 8.0,
+      "desviacion_train_%": 20.522117476432193,
+      "observado_test": 94,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": -1.3986013986013937,
+      "p_test": 0.8913803754354311,
+      "se_confirma_direccion": false
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 10.0,
+      "desviacion_train_%": -21.682378535170415,
+      "observado_test": 97,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": 1.7482517482517532,
+      "p_test": 0.8644618759948917,
+      "se_confirma_direccion": false
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 11.0,
+      "desviacion_train_%": -24.728063814358233,
+      "observado_test": 90,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": -5.59440559440559,
+      "p_test": 0.5849071638803445,
+      "se_confirma_direccion": true
+    },
+    {
+      "tipo": "estrella",
+      "elemento": 12.0,
+      "desviacion_train_%": -67.36765772298767,
+      "observado_test": 99,
+      "esperado_test": 95.33333333333333,
+      "desviacion_test_%": 3.846153846153851,
+      "p_test": 0.707263507884119,
+      "se_confirma_direccion": false
+    }
+  ],
+  "walk_forward_tasa_frios": 0.6,
+  "walk_forward_n": 30
+}

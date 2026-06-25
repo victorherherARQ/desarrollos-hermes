@@ -1,0 +1,21 @@
+# Euromillones Analyzer - Config
+paths:
+  db: data/euromillones.db
+  raw_csv: data/raw/results.csv
+  reports: reports/
+
+source:
+  url: https://raw.githubusercontent.com/daowa89/lottery-archive/main/eu/euromillones/results.csv
+  type: csv
+
+rules:
+  numeros_rango: [1, 50]
+  estrellas_rango: [1, 12]
+  numeros_por_sorteo: 5
+  estrellas_por_sorteo: 2
+
+analysis:
+  train_split_year: 2021
+  min_pattern_support: 0.01
+  bonferroni_alpha: 0.05
+  backtest_min_p_value: 0.05

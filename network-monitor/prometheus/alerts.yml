@@ -1,0 +1,50 @@
+groups:
+  - name: network-monitor
+    interval: 30s
+    rules:
+      # Descarga baja (el speedtest lo hace lan-scanner)
+      - alert: SlowDownload
+        expr: lan_scanner_download_bps < 50_000_000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Descarga lenta: {{ $value | humanize }}bps"
+          description: "El speedtest lleva >5min por debajo de 50 Mbps"
+
+      # Subida baja
+      - alert: SlowUpload
+        expr: lan_scanner_upload_bps < 10_000_000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Subida lenta: {{ $value | humanize }}bps"
+
+      # Latencia alta
+      - alert: HighLatency
+        expr: lan_scanner_ping_ms > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia alta: {{ $value }}ms"
+
+      # Dispositivo nuevo en la red (más del 5% de aumento en 1h)
+      - alert: PossibleNewDevice
+        expr: increase(lan_scanner_devices_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Dispositivo(s) nuevo(s) en la LAN"
+          description: "Revisa http://localhost:8000/ para identificarlo"
+
+      # Disco casi lleno
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disco casi lleno: {{ $value | humanizePercentage }} libre"
