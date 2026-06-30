@@ -1,0 +1,27 @@
+services:
+  backend:
+    build: ./backend
+    container_name: synchealth-backend
+    environment:
+      - DB_PATH=/app/data/synchealth.db
+    volumes:
+      - synchealth-data:/app/data
+    ports:
+      - "8790:8790"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8790/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: synchealth-frontend
+    ports:
+      - "5190:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  synchealth-data:

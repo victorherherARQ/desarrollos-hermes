@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/.venv/
+backend/.pytest_cache/
+backend/.ruff_cache/
+*.egg-info/
+
+# Distribution / packaging
+build/
+dist/
+*.egg
+
+# Environment / secrets — NEVER commit real .env
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# SQLite
+*.db
+*.db-journal
+backend/data/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
