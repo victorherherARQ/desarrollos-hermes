@@ -54,11 +54,10 @@ from config import (
 
 logger = logging.getLogger("agent.oauth")
 
-# Si MOCK_IDP=true, identity_exchange() NO llama a Keycloak: devuelve un
-# access_token firmado localmente con los mismos claims que habría dado KC.
-# Útil para E2E contra KC 24 que NO soporta jwt-bearer (limitación documentada
-# en docs/POOL.md §L1). En KC 26+ poner MOCK_IDP=false.
-MOCK_IDP = os.getenv("MOCK_IDP", "false").lower() in ("true", "1", "yes")
+# ─── Cliente afirma su identidad con client_assertion (RFC 7521 HS256). ────
+# AGENT_CLIENT_SECRET se usa solo para autenticar al cliente (RFC 7521).
+# La identidad del HUMANO viaja en `identity_assertion` (firmada con RS256
+# usando AGENT_SIGNING_PRIVATE_PEM; KC verifica con la publica registrada).
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,55 +279,6 @@ class OAuthClient:
             httpx.HTTPStatusError si el IdP responde con >= 400.
         """
         logger.info("[C/Identity] canjeando identity_assertion scope=%s", scope)
-
-        if MOCK_IDP:
-            # Modo mock: KC 24 no soporta jwt-bearer, así que generamos
-            # localmente un access_token con los claims que el IdP habría
-            # metido. La firma es HS256 con AGENT_CLIENT_SECRET.
-            import jwt as _pyjwt
-            now = int(time.time())
-            # Decodificar la assertion para extraer sub y los claims custom
-            try:
-                inner = _pyjwt.decode(
-                    identity_assertion,
-                    AGENT_CLIENT_SECRET,
-                    algorithms=["HS256"],
-                    options={"verify_aud": False},
-                )
-            except Exception as e:
-                logger.error("[C/Identity] MOCK: no se pudo decodificar assertion: %s", e)
-                raise httpx.HTTPStatusError(
-                    f"Invalid assertion: {e}",
-                    request=httpx.Request("POST", IDP_TOKEN_ENDPOINT),
-                    response=httpx.Response(400, text=f"invalid_assertion: {e}"),
-                )
-            token_payload = {
-                "iss":   IDP_ISSUER,
-                "sub":   inner.get("sub"),
-                "aud":   AGENT_CLIENT_ID,
-                "azp":   AGENT_CLIENT_ID,
-                "scope": scope,
-                "iat":   now,
-                "exp":   now + 300,
-                "auth_time": now,
-                "acr":   "id-claim+push-biometric",
-                "amr":   ["dni-knowledge", "push", "faceid"],
-                "act":   inner.get("act", {"sub": AGENT_CLIENT_ID}),
-                "dni_verified":    True,
-                "dob_verified":    True,
-                "identity_method": "dni+dob",
-            }
-            return {
-                "access_token": _pyjwt.encode(
-                    token_payload,
-                    AGENT_CLIENT_SECRET,
-                    algorithm="HS256",
-                    headers={"typ": "JWT", "kid": "mock-idp"},
-                ),
-                "expires_in":  300,
-                "token_type":  "Bearer",
-                "scope":       scope,
-            }
 
         # En KC 26+ el grant `urn:ietf:params:oauth:grant-type:jwt-bearer`
         # funciona vía un **Identity Provider broker** de tipo `jwt-authorization-grant`.

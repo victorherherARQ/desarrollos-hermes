@@ -45,6 +45,8 @@ from pydantic import BaseModel, Field
 from config import (
     AGENT_CLIENT_ID,
     AGENT_CLIENT_SECRET,
+    AGENT_SIGNING_KID,
+    AGENT_SIGNING_PRIVATE_PEM,
     API_BASE_URL,
     CLIENT_MOCK_REDIRECT_URI,
     IDP_ISSUER,
@@ -59,34 +61,37 @@ from oauth_client import OAuthClient
 PENDING_CHALLENGES: dict[str, dict[str, Any]] = {}
 
 
-# ─── Helper: firmar identity-assertion JWT (HS256 con AGENT_CLIENT_SECRET)
+# ─── Helper: firmar identity-assertion JWT (RS256 con AGENT_SIGNING_PRIVATE_PEM)
 def _sign_identity_assertion(
     payload: dict[str, Any],
     *,
     ttl_seconds: int = 120,
 ) -> str:
     """
-    Firma una identity-assertion JWT con HS256.
+    Firma una identity-assertion JWT con RS256 (clave privada RSA del agente).
 
     Garantiza que el payload tenga SIEMPRE:
       - `iat` (issued at)         - ahora
       - `exp` (expires at)        - ahora + ttl_seconds
       - `jti` (JWT ID)            - UUID4 aleatorio (anti-replay)
 
-    En PoC usamos HS256 (mismo secreto que el client). En producción sería
-    RS256 con la private_key del agente y la public_key registrada en el
-    IdP — o un client_assertion JWT firmado con la key del cliente.
+    KC 26+ requiere algoritmos asimetricos en el broker jwt-authorization-grant.
+    La clave publica (PEM) se registra en KC via scripts/configure_jwt_broker_idp.py
+    como `config.publicKeySignatureVerifier` del IdP broker.
+
+    El header incluye `kid=AGENT_SIGNING_KID` para que el IdP pueda seleccionar
+    la clave correcta (preparado para rotacion futura).
 
     Args:
         payload: claims custom (sub, dni_verified, dob_verified, identity_method, ...).
                  Puede traer iat/exp/jti que se sobreescriben.
-        ttl_seconds: vida útil de la assertion (default 120s = 2 min).
+        ttl_seconds: vida util de la assertion (default 120s = 2 min).
 
     Returns:
         JWT en formato compacto (xxx.yyy.zzz).
     """
     now = int(time.time())
-    # Sobre-escribir campos críticos para evitar tokens idénticos por el mismo payload
+    # Sobre-escribir campos criticos para evitar tokens identicos por el mismo payload
     payload = {
         **payload,
         "iat": now,
@@ -95,9 +100,9 @@ def _sign_identity_assertion(
     }
     return pyjwt.encode(
         payload,
-        AGENT_CLIENT_SECRET,
-        algorithm="HS256",
-        headers={"typ": "JWT", "kid": AGENT_CLIENT_ID},
+        AGENT_SIGNING_PRIVATE_PEM,
+        algorithm="RS256",
+        headers={"typ": "JWT", "kid": AGENT_SIGNING_KID},
     )
 
 # ─── Logging ────────────────────────────────────────────────────────────────

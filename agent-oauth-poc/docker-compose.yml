@@ -105,7 +105,14 @@ services:
       AGENT_CLIENT_SECRET: secret-del-agente
       API_BASE_URL: http://spring-boot-api:9090
       CLIENT_MOCK_REDIRECT_URI: http://client-mock:3000/auth/callback
+      # RS256 signing key - si el PEM existe en el host, lo montamos.
+      # Si no, config.py genera uno nuevo en este path DENTRO del contenedor
+      # (no sobrevivira a `docker rm`, pero sirve para PoC rapido).
+      AGENT_SIGNING_KEY_PATH: /var/run/agent/signing/rsa-priv.pem
       LOG_LEVEL: INFO
+    volumes:
+      # Keypair RSA persistente entre reinicios
+      - agent-signing-key:/var/run/agent/signing:rw
     depends_on:
       - keycloak
     networks:
@@ -144,3 +151,5 @@ networks:
 volumes:
   postgres-data:
     name: agent-poc-postgres-data
+  agent-signing-key:
+    name: agent-poc-agent-signing-key

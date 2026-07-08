@@ -440,6 +440,59 @@ def ensure_jwt_auth_grant_idp(token):
     return with_ok(f"IdP broker '{JWT_AUTH_GRANT_IDP_ALIAS}'", status, body, ok_status=201)
 
 
+def ensure_demo_user_federation(token):
+    """
+    KC 26+ con broker jwt-authorization-grant exige que cada usuario tenga
+    una FederatedIdentity enlazada al alias del IdP broker
+    (`getUserByFederatedIdentity` retorna null si falta).
+    Sin federation: jwt-bearer devuelve 502 invalid_grant 'User not found'.
+    Aqui la creamos idempotente para ana, luis, marta.
+    """
+    print(f"\n[8/8] Federaciones demo (ana/luis/marta <-> {JWT_AUTH_GRANT_IDP_ALIAS})")
+    ok = True
+    for username in ("ana", "luis", "marta"):
+        status, body = api(
+            "GET", f"{REALM_NAME}/users?username={username}", token
+        )
+        users = json.loads(body) if isinstance(body, str) else body or []
+        if not users:
+            print(f"  - {username}: usuario no existe, skip")
+            continue
+        user_id = users[0]["id"]
+
+        # Comprobar si ya tiene la federation
+        status, body = api(
+            "GET",
+            f"{REALM_NAME}/users/{user_id}/federated-identity",
+            token,
+        )
+        existing_feds = (
+            json.loads(body) if isinstance(body, str) else body or []
+        )
+        federated_aliases = {f.get("identityProvider") for f in existing_feds}
+        if JWT_AUTH_GRANT_IDP_ALIAS in federated_aliases:
+            print(f"  - {username}: ya federado, skip")
+            continue
+
+        payload = {
+            "identityProvider": JWT_AUTH_GRANT_IDP_ALIAS,
+            "userId":          username,
+            "userName":        username,
+        }
+        status, body = api(
+            "POST",
+            f"{REALM_NAME}/users/{user_id}/federated-identity/{JWT_AUTH_GRANT_IDP_ALIAS}",
+            token,
+            payload,
+        )
+        success = with_ok(
+            f"  + federation {username} <-> {JWT_AUTH_GRANT_IDP_ALIAS}",
+            status, body, ok_status=204,
+        )
+        ok = ok and success
+    return ok
+
+
 # ────────────────────── Verificación final ─────────────────────────────────
 def verify(token):
     print(f"\n[8/8] Verificación end-to-end")
@@ -492,6 +545,7 @@ def main():
         assign_scopes_to_client(token, agent_id, scope_ids)
     ensure_realm_default_scopes(token)
     ensure_jwt_auth_grant_idp(token)
+    ensure_demo_user_federation(token)
     ok = verify(token)
 
     print("\n" + "=" * 64)

@@ -61,7 +61,102 @@ else:
 AGENT_CLIENT_ID = os.getenv("AGENT_CLIENT_ID", "agente-ia")
 AGENT_CLIENT_SECRET = os.getenv("AGENT_CLIENT_SECRET", "secret-del-agente")
 
-# ─── API de negocio invocada por el agente ──────────────────────────────────
+# ─── Clave privada RSA para firmar identity-assertion (RS256, KC 26+) ──────
+# AGENT_SIGNING_KEY_PATH: ruta al PEM de la clave privada del agente.
+# Si no existe, load_signing_key() genera un keypair nuevo y lo persiste.
+# En Docker, se monta como volumen para que sobreviva a `docker rm`.
+import hashlib
+import logging as _logging
+from pathlib import Path as _Path
+
+from cryptography.hazmat.primitives import serialization as _serialization
+from cryptography.hazmat.primitives.asymmetric import rsa as _rsa
+
+_logger = _logging.getLogger(__name__)
+
+AGENT_SIGNING_KEY_PATH = os.getenv(
+    "AGENT_SIGNING_KEY_PATH",
+    "/home/vhdez/.hermes/state/agent-signing-rsa.pem",
+)
+
+AGENT_SIGNING_KID = os.getenv(
+    "AGENT_SIGNING_KID",
+    hashlib.sha256(AGENT_CLIENT_ID.encode()).hexdigest()[:16],
+)
+
+
+def _generate_rsa_keypair(key_size: int = 2048):
+    """Genera un keypair RSA-2048 y lo (pem_priv, pem_pub)."""
+    key = _rsa.generate_private_key(public_exponent=65537, key_size=key_size)
+    priv = key.private_bytes(
+        encoding=_serialization.Encoding.PEM,
+        format=_serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=_serialization.NoEncryption(),
+    )
+    pub = key.public_key().public_bytes(
+        encoding=_serialization.Encoding.PEM,
+        format=_serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    return priv, pub
+
+
+def load_signing_key(private_key_path: str | None = None) -> dict:
+    """
+    Carga (o genera y persiste) el keypair RSA del agente.
+
+    Returns:
+        dict con:
+          - 'private' (bytes PEM)  para firmar JWTs
+          - 'public'  (bytes PEM)  para subir a KC como publicKeySignatureVerifier
+          - 'kid'     (str)        identificador publico de la clave
+
+    Raises:
+        ValueError: si el PEM existe pero no se puede parsear.
+    """
+    path = _Path(private_key_path or AGENT_SIGNING_KEY_PATH)
+    if path.exists():
+        priv_bytes = path.read_bytes()
+        try:
+            key = _serialization.load_pem_private_key(priv_bytes, password=None)
+        except Exception as exc:
+            raise ValueError(
+                f"No se pudo parsear la private key en {path}: {exc}"
+            ) from exc
+        pub_bytes = key.public_key().public_bytes(
+            encoding=_serialization.Encoding.PEM,
+            format=_serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        _logger.info(
+            "Loaded signing key (existing) kid=%s path=%s",
+            AGENT_SIGNING_KID, path,
+        )
+        return {"private": priv_bytes, "public": pub_bytes, "kid": AGENT_SIGNING_KID}
+
+    # No existe -> generar y persistir
+    priv, pub = _generate_rsa_keypair()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(priv)
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    _logger.warning(
+        "Generated NEW RSA keypair (PoC) kid=%s path=%s — "
+        "registra la clave publica en KC con scripts/configure_jwt_broker_idp.py",
+        AGENT_SIGNING_KID, path,
+    )
+    return {"private": priv, "public": pub, "kid": AGENT_SIGNING_KID}
+
+
+# Carga/crea el keypair al importar el modulo (lazy=False: cualquier error se ve
+# al arrancar, no en mitad de una request).
+_AGENT_SIGNING = load_signing_key()
+AGENT_SIGNING_PRIVATE_PEM = _AGENT_SIGNING["private"]
+AGENT_SIGNING_PUBLIC_PEM = _AGENT_SIGNING["public"].decode("utf-8")
+AGENT_SIGNING_KEY: dict = _AGENT_SIGNING
+
+
+# ─── Usuarios "registrados" en el PoC ──────────────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "http://spring-boot-api:9090")
 
 # ─── Redirect URI de client-mock ────────────────────────────────────────────
@@ -83,7 +178,6 @@ CLIENT_MOCK_REDIRECT_URI = os.getenv(
 # almacenamos DNI + fecha de nacimiento HASHEADOS (SHA-256). En producción
 # esto sería una llamada a un servicio de verificación de identidad real
 # (AEAT, SEP, Veriff, Onfido, etc.).
-import hashlib
 
 
 def _hash_identifier(value: str) -> str:
