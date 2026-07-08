@@ -119,12 +119,11 @@ def ensure_realm(token, reset=False):
         "resetPasswordAllowed": False,
         "editUsernameAllowed": False,
         "bruteForceProtected": True,
-        # NO habilitamos CIBA (lo prohibimos en la nueva arquitectura)
-        "cibaEnabled": False,
-        # Device Code Flow support explícito
+        # KC 26 deprecó `cibaEnabled` (siempre False por defecto).
+        # Para habilitar CIBA hay que usar --features=preview al arrancar KC.
+        # Lo dejamos siempre desactivado.
         "attributes": {
             "deviceFlowSupported": "true",
-            "oauth2.device.authorization.grant.enabled": "true",
         },
     }
     status, body = api("POST", "", token, realm)
@@ -263,6 +262,10 @@ def ensure_agente_client(token):
         "enabled": True,
         "publicClient": False,
         "secret": "secret-del-agente",
+        # KC 26+: client-secret-jwt permite autenticar al cliente con
+        # client_assertion (JWT firmado con el client_secret) en lugar
+        # del client_secret plano en el body. Obligatorio para jwt-bearer grant.
+        "clientAuthenticatorType": "client-secret-jwt",
         "serviceAccountsEnabled": True,
         "directAccessGrantsEnabled": False,
         "standardFlowEnabled": True,
@@ -278,6 +281,21 @@ def ensure_agente_client(token):
             "backchannel.logout.url": "",
             "backchannel.logout.session.required": "false",
             "display.on.consent.screen": "false",
+            # KC 26: atributo booleano OBLIGATORIO para habilitar jwt-bearer grant
+            # en el cliente. Sin él, JWTAuthorizationGrantValidator lanza
+            # "JWT Authorization Grant is not supported for the requested client".
+            # OJO: el nombre EXACTO es `oauth2.jwt.authorization.grant.enabled`
+            # (NO `jwt.authorization.grant.enabled` — KC 26 lo busca con prefijo oauth2.)
+            "oauth2.jwt.authorization.grant.enabled": "true",
+            # Alias del IdP broker jwt-authorization-grant que KC usará
+            # para validar la identity-assertion.
+            "oauth2.jwt.authorization.grant.idp": "agent-poc-jwt-broker",
+            # Lista de grants habilitados para el cliente
+            "oauth2.grant.type": (
+                "authorization_code,"
+                "urn:ietf:params:oauth:grant-type:device_code,"
+                "urn:ietf:params:oauth:grant-type:jwt-bearer"
+            ),
         },
     }
 
@@ -375,15 +393,56 @@ def assign_scopes_to_client(token, client_id, scope_ids):
 
 # ────────────────────── Realm default scopes ───────────────────────────────
 def ensure_realm_default_scopes(token):
-    print(f"\n[6/7] Realm default scopes (openid/profile/email)")
+    print(f"\n[6/8] Realm default scopes (openid/profile/email)")
     payload = {"defaultDefaultClientScopes": ["openid", "profile", "email"]}
     status, body = api("PUT", REALM_NAME, token, payload)
     with_ok("Default scopes", status, body)
 
 
+# ────────────────────── JWT Authorization Grant IdP broker ─────────────────
+JWT_AUTH_GRANT_IDP_ALIAS = "agent-poc-jwt-broker"
+JWT_AUTH_GRANT_ISSUER    = "http://localhost:8180/realms/agent-poc/idp/jwt-broker"
+
+
+def ensure_jwt_auth_grant_idp(token):
+    """
+    KC 26 trata el grant `urn:ietf:params:oauth:grant-type:jwt-bearer`
+    como un Identity Provider broker de tipo `jwt-authorization-grant`.
+
+    Hay que registrarlo en el realm o KC devolverá:
+      "JWT Authorization Grant is not supported for the requested client"
+
+    El campo `issuer` del IdP debe matchear el `iss` claim de la
+    identity-assertion que el agente envía.
+    """
+    print(f"\n[7/8] IdP broker 'jwt-authorization-grant' (KC 26+)")
+    status, body = api("GET", f"{REALM_NAME}/identity-provider/instances", token)
+    if status == 200:
+        existing = json.loads(body) if isinstance(body, str) else body
+        for idp in existing:
+            if idp.get("alias") == JWT_AUTH_GRANT_IDP_ALIAS:
+                print(f"  ℹ️  Ya existe alias='{JWT_AUTH_GRANT_IDP_ALIAS}'")
+                return True
+
+    payload = {
+        "alias":               JWT_AUTH_GRANT_IDP_ALIAS,
+        "providerId":          "jwt-authorization-grant",
+        "enabled":             True,
+        "displayName":         "JWT Auth Grant Broker (PoC agente-ia)",
+        "config": {
+            "issuer":             JWT_AUTH_GRANT_ISSUER,
+            "allowedClockSkew":   "30",
+        },
+    }
+    status, body = api(
+        "POST", f"{REALM_NAME}/identity-provider/instances", token, payload
+    )
+    return with_ok(f"IdP broker '{JWT_AUTH_GRANT_IDP_ALIAS}'", status, body, ok_status=201)
+
+
 # ────────────────────── Verificación final ─────────────────────────────────
 def verify(token):
-    print(f"\n[7/7] Verificación end-to-end")
+    print(f"\n[8/8] Verificación end-to-end")
     # Verificamos que el cliente agente-ia YA NO tiene directAccessGrantsEnabled
     url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/clients?clientId=agente-ia"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
@@ -432,6 +491,7 @@ def main():
     if agent_id:
         assign_scopes_to_client(token, agent_id, scope_ids)
     ensure_realm_default_scopes(token)
+    ensure_jwt_auth_grant_idp(token)
     ok = verify(token)
 
     print("\n" + "=" * 64)

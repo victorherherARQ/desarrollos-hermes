@@ -24,12 +24,13 @@ services:
       start_period: 10s
 
   # ───────────────────────────────────────────────────────────────
-  # Keycloak 24 — IdP con flujos A (Auth Code + PKCE) y B (Device Code)
-  #               + soporte para C (OBO) cuando KC 26+
-  # CIBA desactivado tanto en el realm como en JAVA_TOOL_OPTIONS.
+  # Keycloak 26.6.4 — IdP con flujos A (Auth Code + PKCE) y B (Device Code)
+  #               + soporte para C (Identity/JWT-Bearer) que KC 24 NO soportaba.
+  # Migración 2026-07-08: KC 26 habilita `urn:ietf:params:oauth:grant-type:jwt-bearer`
+  # por defecto y soporta custom claims en la assertion directamente.
   # ───────────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0
+    image: quay.io/keycloak/keycloak:26.6.4
     container_name: agent-poc-keycloak
     command: ["start-dev", "--import-realm"]
     depends_on:
@@ -42,8 +43,6 @@ services:
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      # CIBA desactivado a nivel de feature flag del servidor.
-      JAVA_TOOL_OPTIONS: "-Dkeycloak.profile.feature.ciba=disabled"
     ports:
       # 8180 externo (8080 está ocupado por structurizr-c4-viewer en el host)
       - "8180:8080"

@@ -359,8 +359,14 @@ async def auth_identity(req: IdentityRequest) -> IdentityResponse:
     iat = int(time.time())
     exp = iat + 120  # 2 min
 
+    # iss de la identity_assertion = iss del IdP broker KC (debe matchear).
+    # Por defecto usamos el issuer que create_realm.py registra como IdP broker.
+    _jwt_auth_issuer = os.getenv(
+        "JWT_AUTH_GRANT_ISSUER",
+        "http://localhost:8180/realms/agent-poc/idp/jwt-broker",
+    )
     identity_assertion = {
-        "iss":             AGENT_CLIENT_ID,
+        "iss":             _jwt_auth_issuer,
         "sub":             req.user_id,
         "aud":             IDP_ISSUER,
         "iat":             iat,

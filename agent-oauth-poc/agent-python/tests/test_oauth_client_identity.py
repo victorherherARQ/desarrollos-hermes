@@ -13,6 +13,7 @@ import httpx
 import pytest
 
 from oauth_client import OAuthClient
+from config import AGENT_CLIENT_ID, AGENT_CLIENT_SECRET, IDP_TOKEN_ENDPOINT
 
 
 class _FakeAsyncContext:
@@ -104,7 +105,21 @@ async def test_identity_exchange_envia_grant_type_jwt_bearer():
     assert sent_data["data"]["assertion"] == "eyJ.fake"
     assert sent_data["data"]["scope"] == "calendar.read"
     assert "client_id" in sent_data["data"]
-    assert "client_secret" in sent_data["data"]
+    # KC 26: autenticamos al cliente con client_assertion (RFC 7521)
+    assert "client_assertion" in sent_data["data"]
+    assert sent_data["data"]["client_assertion_type"] == (
+        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+    )
+    # client_assertion debe ser una JWT firmada con HS256
+    import jwt as _pyjwt
+    payload = _pyjwt.decode(
+        sent_data["data"]["client_assertion"],
+        AGENT_CLIENT_SECRET,
+        algorithms=["HS256"],
+        audience=IDP_TOKEN_ENDPOINT,
+    )
+    assert payload["iss"] == AGENT_CLIENT_ID
+    assert payload["sub"] == AGENT_CLIENT_ID
 
 
 @pytest.mark.asyncio

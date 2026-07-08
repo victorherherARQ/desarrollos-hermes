@@ -75,18 +75,14 @@ print(f"[3/4] Grants actuales: {current_grants!r}")
 # 4. Añadir el grant_type si no está
 attrs = client.setdefault("attributes", {})
 
-# KC 24 tiene dos formatos válidos para oauth2.grant.type:
-#   a) String comma-separated: "authorization_code,password,..."
-#   b) JSON array:             ["authorization_code","password",...]
-# Ambos formatos son aceptados por la Admin API. Ponemos AMBOS para máxima
-# compatibilidad con el client authenticator interno.
+# KC 26 acepta el grant_type en un único formato:
+#   string comma-separated: "authorization_code,urn:ietf:params:oauth:grant-type:jwt-bearer"
+# (el formato array con key "oauth2.grant.type[]" causa "Cannot parse JSON" en KC 26)
 grants_list = [g.strip() for g in attrs.get("oauth2.grant.type", "").split(",") if g.strip()]
 if GRANT_TYPE not in grants_list:
     grants_list.append(GRANT_TYPE)
 
-attrs["oauth2.grant.type"] = ",".join(grants_list)  # formato a (string)
-# Algunos realm setups también necesitan un duplicado como array:
-attrs["oauth2.grant.type[]"] = grants_list          # formato b (array)
+attrs["oauth2.grant.type"] = ",".join(grants_list)
 
 # PUT para guardar
 status, body = http(
@@ -102,7 +98,6 @@ if status not in (204, 200):
     print(f"FAIL: PUT cliente: {status} {body[:300]}")
     sys.exit(1)
 print(f"[4/4] Grants actualizados: {attrs['oauth2.grant.type']!r}")
-print(f"     (también como array: {attrs['oauth2.grant.type[]']!r})")
 
 print()
 print("OK: cliente 'agente-ia' ahora acepta el grant_type JWT bearer.")

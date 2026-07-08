@@ -40,6 +40,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+import jwt as pyjwt
 
 from config import (
     AGENT_CLIENT_ID,
@@ -329,10 +330,34 @@ class OAuthClient:
                 "scope":       scope,
             }
 
+        # En KC 26+ el grant `urn:ietf:params:oauth:grant-type:jwt-bearer`
+        # funciona vía un **Identity Provider broker** de tipo `jwt-authorization-grant`.
+        # La JWT assertion (campo `assertion`) debe tener `iss` = issuer del broker
+        # configurado en KC.
+        # RFC 7521 §4: el client_assertion prueba la identidad del cliente.
+        now = int(time.time())
+        jwt_auth_grant_issuer = os.getenv(
+            "JWT_AUTH_GRANT_ISSUER",
+            "http://localhost:8180/realms/agent-poc/idp/jwt-broker",
+        )
+        client_jwt = pyjwt.encode(
+            {
+                "iss": AGENT_CLIENT_ID,
+                "sub": AGENT_CLIENT_ID,
+                "aud": IDP_TOKEN_ENDPOINT,
+                "jti": uuid.uuid4().hex,
+                "iat": now,
+                "exp": now + 60,
+            },
+            AGENT_CLIENT_SECRET,
+            algorithm="HS256",
+        )
+
         data = {
             "grant_type":    "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "client_id":     AGENT_CLIENT_ID,
-            "client_secret": AGENT_CLIENT_SECRET,
+            "client_assertion":        client_jwt,
+            "client_assertion_type":   "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
             "assertion":     identity_assertion,
             "scope":         scope,
         }
