@@ -60,17 +60,39 @@ PENDING_CHALLENGES: dict[str, dict[str, Any]] = {}
 
 
 # ─── Helper: firmar identity-assertion JWT (HS256 con AGENT_CLIENT_SECRET)
-def _sign_identity_assertion(payload: dict[str, Any]) -> str:
+def _sign_identity_assertion(
+    payload: dict[str, Any],
+    *,
+    ttl_seconds: int = 120,
+) -> str:
     """
     Firma una identity-assertion JWT con HS256.
+
+    Garantiza que el payload tenga SIEMPRE:
+      - `iat` (issued at)         - ahora
+      - `exp` (expires at)        - ahora + ttl_seconds
+      - `jti` (JWT ID)            - UUID4 aleatorio (anti-replay)
 
     En PoC usamos HS256 (mismo secreto que el client). En producción sería
     RS256 con la private_key del agente y la public_key registrada en el
     IdP — o un client_assertion JWT firmado con la key del cliente.
 
+    Args:
+        payload: claims custom (sub, dni_verified, dob_verified, identity_method, ...).
+                 Puede traer iat/exp/jti que se sobreescriben.
+        ttl_seconds: vida útil de la assertion (default 120s = 2 min).
+
     Returns:
         JWT en formato compacto (xxx.yyy.zzz).
     """
+    now = int(time.time())
+    # Sobre-escribir campos críticos para evitar tokens idénticos por el mismo payload
+    payload = {
+        **payload,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "jti": uuid.uuid4().hex,
+    }
     return pyjwt.encode(
         payload,
         AGENT_CLIENT_SECRET,
