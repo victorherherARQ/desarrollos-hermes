@@ -312,19 +312,19 @@ grant_type=urn:ietf:params:oauth:grant-type:device_code
 // Modelo operacional:
 //   • Ana REGISTRADA en el IdP (tiene sub, mobile vinculado, biometría).
 //   • Ana NO logada. NO tiene token. Llama por teléfono.
-//   • Agente IA identifica a Ana por voz (voiceprint) + nº entrante
-//     (matching con la agenda interna del agente).
+//   • Agente IA identifica a Ana por DNI + fecha de nacimiento
+//     (datos identificativos en lugar de voiceprint).
 //   • Agente pide al IdP step-up vía push al móvil de Ana.
 //   • Ana confirma con biometría (FaceID / huella) en su móvil.
-//   • IdP emite access_token con sub=ana, act=agente-ia, acr=phone-voice+push.
+//   • IdP emite access_token con sub=ana, act=agente-ia, acr=id-claim+push.
 //   • Agente llama a la API con ese token.
 //
 // Estándares: RFC 7521/7523 (JWT Bearer Assertion), CIBA-style step-up,
 //             OAuth 2.0 Token Exchange (RFC 8693) para el "act" claim.
 export const flowC = {
   id: 'C',
-  title: 'Flujo C - Voice-Channel Identity + Push Step-Up',
-  meta: 'RFC 7521/7523 · RFC 8693 · CIBA-style · voicebot + push al móvil',
+  title: 'Flujo C - Identity Claim (DNI+DOB) + Push Step-Up',
+  meta: 'RFC 7521/7523 · RFC 8693 · CIBA-style · id-claim + push al móvil',
   viable: true,
   nonViableReason: null,
   actors: [
@@ -337,30 +337,43 @@ export const flowC = {
   steps: [
     {
       from: 'user', to: 'agente',
-      kind: 'sync', label: 'Llamada entrante (PSTN/SIP/Teams)',
-      desc: 'Ana marca al número del call-center. La PBX enruta al Agente IA. NO hay canal web. Ana está registrada pero NO logada en el IdP.',
-      code: { note:
-'Canal: voz sobre SIP/PSTN/Teams Voice.\\nIdentificadores:\\n  - n\\u00famero origen: +34 600 000 000\\n  - voiceprint (enrollment previo)\\nAna NO presenta token. NO tiene navegador.\\nEstado IdP: NO autenticada.' },
+      kind: 'sync', label: 'Cliente envía DNI+DOB al agente (HTTPS)',
+      desc: 'El cliente (webapp, CLI, IVR que habla con Ana) recoge DNI + fecha de nacimiento de Ana por un canal seguro (HTTPS, sin cruzar internet en claro) y los envía al agente.',
+      code: { json:
+`POST /agente/auth/identity HTTP/1.1
+Host: agente:7000
+Content-Type: application/json
+Authorization: Bearer <client_token>
+{
+  "user_id": "ana",
+  "dni":     "12345678Z",
+  "dob":     "1990-05-15",
+  "scope":   "calendar.read"
+}` },
       actor: 'agente',
     },
     {
       from: 'agente', to: 'agente',
-      kind: 'self', label: 'identifica Ana (voz + nº entrante + voiceprint)',
-      desc: 'El agente corre matching en 2 niveles: (1) número entrante → entrada de la agenda interna, (2) voiceprint contra el enrollment para confirmar. Si voiceprint > umbral → candidato único = Ana. Si no → escalado a humano.',
+      kind: 'self', label: 'verifica DNI+DOB contra tabla interna',
+      desc: 'El agente hashea DNI + DOB y los compara contra la tabla de usuarios registrados (PoC: en memoria; en prod: servicio externo AEAT/SEP/Veriff). Si coincide, genera una identity-assertion JWT firmada por él. Si no, aborta con 401.',
       code: { python:
 `# internamente, en el agente
-candidates = crm.lookup_by_phone(caller_id)   # +34 600 000 000 → 1 contacto
-score = voiceprint.verify(stream, candidates)  # cosine sim > 0.92
-if score > 0.92:
-    user = candidates[0]   # Ana
+import hashlib
+dni_h = hashlib.sha256(dni.lower().strip().encode()).hexdigest()
+dob_h = hashlib.sha256(dob.strip().encode()).hexdigest()
+if dni_h == USERS[user_id]['dni_hash'] and dob_h == USERS[user_id]['dob_hash']:
+    identity_assertion = {
+        'sub': user_id, 'dni_verified': True, 'dob_verified': True,
+        'identity_method': 'dni+dob', 'acr': 'id-claim', ...
+    }
 else:
-    transfer_to_human()    # baja confianza` },
+    raise HTTPException(status_code=401, detail='invalid id claim')` },
       actor: 'agente',
     },
     {
       from: 'agente', to: 'idp',
-      kind: 'sync', label: 'POST /token  grant_type=password  +  x-voice-assertion',
-      desc: 'El agente (cliente confidencial) pide un token al IdP SIN password de Ana. Demuestra identidad con su client_secret Y firma un JWT de "voice assertion" que dice: sub=ana, voice_verified=true, acr=phone-voice. El IdP debe tener un protocol mapper que acepte esta assertion.',
+      kind: 'sync', label: 'POST /token  grant_type=password  +  x-identity-assertion',
+      desc: 'El agente (cliente confidencial) pide un token al IdP SIN password de Ana. Demuestra identidad con su client_secret Y firma un JWT de "identity assertion" que dice: sub=ana, dni_verified=true, dob_verified=true, acr=id-claim. El IdP debe tener un protocol mapper que acepte esta assertion.',
       tokenClaims: [
         { claim: 'iss',  value: 'agente-ia',                              note: 'Emisor: el agente IA. El IdP verifica su firma con la clave pública del cliente registrada en el realm.' },
         { claim: 'sub',  value: 'f8a1d3e2-7b09-4a2e-9c11-ana',            note: 'Sujeto: ana (el humano) — el agente declara QUIÉN es el humano detrás de la llamada.' },
@@ -368,12 +381,12 @@ else:
         { claim: 'iat',  value: '1751990000',                              note: 'Issued at: UNIX ts de cuando se firmó la assertion.' },
         { claim: 'exp',  value: '1751990120',                              note: 'Expires at: 2 min después. Corto porque la voz es efímera.' },
         { claim: 'jti',  value: '5c9a1b3e-...',                           note: 'JWT ID único para prevenir replay (el IdP cachea jtis recientes).' },
-        { claim: 'acr',  value: 'phone-voice',                             note: 'Auth Context Class Ref: cómo se autenticó Ana. phone-voice = voiceprint sobre llamada activa.' },
+        { claim: 'acr',  value: 'id-claim',                               note: 'Auth Context Class Ref: cómo se autenticó Ana. id-claim = identidad mediante datos identificativos (DNI+DOB).' },
         { claim: 'auth_time', value: '1751990000',                         note: 'Cuándo se autenticó Ana (no cuándo se firmó la assertion — el agente puede firmar ms después).' },
-        { claim: 'voice_verified',      value: 'true',                     note: 'Custom claim del realm: Ana pasó la prueba de voiceprint.' },
-        { claim: 'voiceprint_score',    value: '0.94',                     note: 'Custom: score de similitud (cosine) sobre el enrollment. Umbral típico = 0.92.' },
-        { claim: 'caller_phone',        value: '+34 600 000 000',          note: 'Custom: nº origen PSTN/SIP. El IdP lo compara con la agenda del agente (outbound call) o el CRM.' },
-        { claim: 'channel',             value: 'voice',                    note: 'Custom: canal de entrada. Permite a la API rechazar requests que no vengan del canal autorizado.' },
+        { claim: 'dni_verified',      value: 'true',                     note: 'Custom claim del realm: DNI de Ana contrastado contra la tabla interna del agente (en producción: servicio externo AEAT/SEP).' },
+        { claim: 'dob_verified',      value: 'true',                     note: 'Custom claim: fecha de nacimiento de Ana verificada. Factor de conocimiento (algo que el humano SABE).' },
+        { claim: 'identity_method',   value: 'dni+dob',                  note: 'Custom: método de verificación. Permite añadir otros métodos en el futuro (passport, eidas, Veriff).' },
+        { claim: 'channel',             value: 'id-claim',                    note: 'Custom: canal de entrada. Sustituye al antiguo channel=voice por id-claim.' },
         { claim: 'act',  value: { sub: 'agente-ia' },                      note: 'RFC 8693 §4.2: el actor que ejecuta la acción. El humano (sub) actúa VÍA este agente.' },
       ],
       code: { http:
@@ -396,9 +409,11 @@ grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
 //   iat = 1751990000
 //   exp = 1751990120  (2 minutos)
 //   auth_time = 1751990000
-//   acr = phone-voice
-//   voiceprint_score = 0.94
-//   caller_phone = +34...0
+//   acr = id-claim
+//   dni_verified = true
+//   dob_verified = true
+//   identity_method = dni+dob
+//   channel = id-claim
 ` },
       actor: 'agente',
     },
@@ -454,10 +469,10 @@ Content-Type: application/json
     {
       from: 'idp', to: 'agente',
       kind: 'reply', label: '200 {access_token, refresh_token, id_token}',
-      desc: 'El IdP valida la aprobación del móvil y emite el token DEFINITIVO. acr sube a "phone-voice+push-biometric" → cumple requisitos de SCA fuerte (PSD2) y NIST AAL2/AAL3.',
+      desc: 'El IdP valida la aprobación del móvil y emite el token DEFINITIVO. acr sube a "id-claim+push-biometric" → cumple requisitos de SCA fuerte (PSD2) y NIST AAL2/AAL3.',
       code: { json: `{
-  "access_token":  "eyJ... <NUEVO>",
-  "refresh_token": "eyJ... <NUEVO>",
+  "access_token": "***",
+  "refresh_token": "***",
   "id_token":      "eyJ... <NUEVO>",
   "expires_in":    300,
   "token_type":    "Bearer",
@@ -472,11 +487,12 @@ Content-Type: application/json
         exp:        'now + 300s',
         iat:        'now',
         auth_time:  'now',
-        acr:        'phone-voice+push-biometric',     // AAL3-style
-        amr:        ['voice', 'push', 'faceid'],      // multi-factor
+        acr:        'id-claim+push-biometric',     // AAL3-style
+        amr:        ['dni-knowledge', 'push', 'faceid'],  // multi-factor
         act:        { sub: 'agente-ia' },             // RFC 8693: quién actúa
-        voice_score: 0.94,                           // opcional
-        caller_phone: '+34...0',                     // opcional
+        dni_verified:     true,
+        dob_verified:     true,
+        identity_method:  'dni+dob',
       },
       tokenClaims: [
         { claim: 'iss',         value: 'http://keycloak:8080/realms/agent-poc',         note: 'Emisor del access_token: el realm Keycloak que acaba de autenticar.' },
@@ -487,21 +503,21 @@ Content-Type: application/json
         { claim: 'iat',         value: 'now (1751990042)',                             note: 'Issued at: momento de emisión.' },
         { claim: 'exp',         value: 'now + 300s',                                   note: 'Expires at: 5 min. Corto porque aún no se ha completado el flujo C en una API real con MFA fuerte.' },
         { claim: 'auth_time',   value: 'now',                                          note: 'Cuándo Ana terminó de autenticarse (aceptó el push). Más reciente que iat si hubo retries.' },
-        { claim: 'acr',         value: 'phone-voice+push-biometric',                   note: 'Auth Context Class Ref: combinación voiceprint + push + biometría. Cumple NIST AAL3 / PSD2 SCA.' },
-        { claim: 'amr',         value: ['voice', 'push', 'faceid'],                    note: 'Auth Methods References: los 3 factores usados. voice=algo-que-eres, push=algo-que-tienes, faceid=algo-que-eres (vivo).' },
+        { claim: 'acr',         value: 'id-claim+push-biometric',                   note: 'Auth Context Class Ref: combinación DNI+DOB (id-claim) + push al móvil + biometría. Cumple NIST AAL3 / PSD2 SCA.' },
+        { claim: 'amr',         value: ['dni-knowledge', 'push', 'faceid'],         note: 'Auth Methods References: 3 factores usados. dni-knowledge=algo-que-sabe (DNI+DOB), push=algo-que-tiene (móvil), faceid=algo-que-es (vivo).' },
         { claim: 'act',         value: { sub: 'agente-ia' },                           note: 'RFC 8693 §4.2: el agente actúa EN NOMBRE del humano. Sin este claim, sería Ana quien ejecuta la acción directamente.' },
         { claim: 'session_state', value: '9f3a...',                                    note: 'Keycloak tracking de sesión activa (opcional).' },
-        { claim: 'voice_verified', value: 'true',                                      note: 'Custom (mapper): Ana pasó voiceprint. La API puede requerir este claim=true.' },
-        { claim: 'voiceprint_score', value: '0.94',                                    note: 'Custom (mapper): score del voiceprint. Para decisiones de fraude (ej. <0.85 rechaza).' },
-        { claim: 'original_channel', value: 'voice',                                  note: 'Custom (mapper): canal de entrada original. La API puede rechazar tokens cuyo canal no concuerda con la operación.' },
-        { claim: 'auth_chain',  value: ['voice', 'push', 'biometric'],                 note: 'Custom (mapper): trail de auditoría con cada paso del flujo voice-first → push → bio.' },
+        { claim: 'dni_verified', value: 'true',                                      note: 'Custom (mapper): DNI de Ana contrastado. La API puede requerir este claim=true.' },
+        { claim: 'dob_verified', value: 'true',                                      note: 'Custom (mapper): fecha de nacimiento de Ana verificada.' },
+        { claim: 'identity_method', value: 'dni+dob',                                note: 'Custom (mapper): método de verificación. Permite a la API aplicar reglas según el método (más o menos estricto).' },
+        { claim: 'auth_chain',  value: ['dni-knowledge', 'dni-possession', 'push', 'biometric'], note: 'Custom (mapper): trail de auditoría — DNI (saber), DNI (poseer en documento si se valida), push, biometría.' },
       ],
       actor: 'idp',
     },
     {
       from: 'agente', to: 'api',
       kind: 'sync', label: 'GET /api/calendar/events  Bearer <token>',
-      desc: 'El agente llama a la API con el JWT. Spring valida: firma OK, sub=ana, act=agente-ia, scope=calendar.read. Log: [AUDIT] voice-verified + push-approved.',
+      desc: 'El agente llama a la API con el JWT. Spring valida: firma OK, sub=ana, act=agente-ia, scope=calendar.read, dni_verified=true. Log: [AUDIT] id-claim-verified + push-approved.',
       code: { http:
 `GET /api/calendar/events?user_id=ana HTTP/1.1
 Host: spring-boot-api:9090
