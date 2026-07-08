@@ -71,7 +71,7 @@ print(resp["authorize_url"])` },
     user_id, scope
   })}).then(r=>r.json());
   window.location = authorize_url + "&prompt=login";
-</script>` },
+<\/script>` },
       actor: 'mock',
     },
     {

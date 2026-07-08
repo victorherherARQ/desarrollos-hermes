@@ -24,9 +24,22 @@ Cada flujo es un *sequence diagram* animado con:
 
 ## ▶️ Cómo se usa
 
-Hay 3 opciones:
+Hay 3 opciones (en orden de preferencia):
 
-### 1) Servidor local (recomendado)
+### 1) **Doble clic en `flowstudio.html`** (lo más fácil)
+
+Un único fichero autocontenido con CSS + JS inline. **Abre directamente en el navegador sin servidor**. Ideal para compartir, abrir desde Explorador de Windows, etc.
+
+```bash
+# Solo doble clic sobre:
+agent-oauth-poc/docs/html/flowstudio.html
+```
+
+> Si modificas los `.js`/`.css` en `static/`, regenera con `python3 build_standalone.py`.
+
+### 2) Servidor local (versión modular)
+
+La versión canónica: ES modules separados en `static/`. Útil durante desarrollo porque puedes editar `flows.js` y recargar.
 
 ```bash
 cd agent-oauth-poc/docs/html
@@ -34,15 +47,18 @@ python3 -m http.server 8765
 # Abre http://localhost:8765
 ```
 
-Módulo ES6 necesita un servidor (no funciona con `file://`).
+### 3) VS Code "Live Server" o GitHub Pages
 
-### 2) VS Code "Live Server" o similar
+Abrir `index.html` con un servidor estático cualquiera. Es 100% client-side.
 
-Abrir `index.html` directamente con un servidor estático.
+---
 
-### 3) GitHub Pages o similar
+## ⚠️ Sobre el error CORS de `file://`
 
-Montar `docs/html/` como sitio estático. Es 100% client-side, sin build.
+Los navegadores modernos **bloquean módulos ES6 desde `file://`** (el origen es `null` y CORS lo rechaza), por eso la opción 1 (versión modular) requiere servidor. Para evitarlo:
+
+- **`flowstudio.html`** está construido con CSS + JS inline → **funciona desde `file://`** sin servidor.
+- Generado por `build_standalone.py` desde las mismas fuentes.
 
 ## 🕹️ Controles
 

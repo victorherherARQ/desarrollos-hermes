@@ -1,0 +1,1150 @@
+<!--
+  flowstudio.html — versión standalone generada por build_standalone.py.
+  Doble-clic para abrir; no necesita servidor.
+  Fuente: docs/html/{index.html,static/} — para editar, modifica esos
+  ficheros y vuelve a ejecutar build_standalone.py.
+-->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A+B+C Flow Studio · agent-oauth-poc</title>
+  <style>:root{--bg:#0a0a0b;--bg-2:#111114;--bg-3:#15151a;--bg-elev:#1b1b22;--border:#26262e;--border-strong:#3a3a45;--text:#e7e7ea;--text-dim:#a1a1aa;--text-mute:#6b6b75;--accent:#7e83ff;--accent-2:#5eead4;--warn:#f59e0b;--danger:#ef4444;--ok:#10b981;--a-color:#7e83ff;--b-color:#5eead4;--c-color:#f472b6;--actor-bg:#111114;--actor-bg-active:#1e1e26;--lifeline:#2a2a33;--lifeline-active:#4a4a55;--msg-strong:#e7e7ea;--msg-dim:#8b8b95;--msg-return:#6ee7b7;--shadow:0 4px 24px rgba(0,0,0,.4);--radius:10px;--radius-sm:6px;--mono:ui-monospace,"JetBrains Mono",SFMono-Regular,Menlo,Consolas,monospace;}*{box-sizing:border-box;}html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;height:100%;-webkit-font-smoothing:antialiased;}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:var(--bg-2);border-bottom:1px solid var(--border);}.brand{display:flex;align-items:center;gap:10px;}.logo{width:26px;height:26px;color:var(--accent);flex-shrink:0;}.title{font-weight:600;font-size:14px;letter-spacing:-.01em;}.subtitle{font-size:11px;color:var(--text-mute);margin-top:1px;}.tabs{display:flex;gap:4px;background:var(--bg-3);padding:4px;border-radius:8px;border:1px solid var(--border);}.tab{background:transparent;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;color:var(--text-dim);display:flex;align-items:center;gap:8px;font-size:13px;font-family:inherit;transition:background .15s,color .15s;}.tab:hover{color:var(--text);background:var(--bg-elev);}.tab[aria-selected="true"]{background:var(--bg-elev);color:var(--text);}.tab-letter{display:inline-block;font-family:var(--mono);font-size:12px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--bg-3);border:1px solid var(--border);}.tab[data-flow="A"][aria-selected="true"] .tab-letter{background:var(--a-color);color:#0a0a0b;border-color:var(--a-color);}.tab[data-flow="B"][aria-selected="true"] .tab-letter{background:var(--b-color);color:#0a0a0b;border-color:var(--b-color);}.tab[data-flow="C"][aria-selected="true"] .tab-letter{background:var(--c-color);color:#0a0a0b;border-color:var(--c-color);}.tab-name{font-weight:500;}.tab-rfc{font-family:var(--mono);font-size:10.5px;color:var(--text-mute);padding-left:6px;border-left:1px solid var(--border);margin-left:2px;}.layout{display:grid;grid-template-columns:1fr 380px;gap:0;min-height:calc(100vh - 110px);}.canvas-wrap{background:var(--bg);display:flex;flex-direction:column;border-right:1px solid var(--border);position:relative;overflow:hidden;min-width:0;}.canvas-header{padding:14px 20px 8px;flex-shrink:0;}.canvas-title{font-size:16px;font-weight:600;letter-spacing:-.01em;}.canvas-meta{font-size:12px;color:var(--text-mute);margin-top:3px;font-family:var(--mono);}.svg-host{flex:1;position:relative;overflow-x:auto;overflow-y:auto;padding:8px 16px 16px;min-height:400px;background:radial-gradient(ellipse at 50% 0%,rgba(126,131,255,.06),transparent 60%),var(--bg);}.svg-host svg{min-height:600px;display:block;}.legend{padding:8px 20px 16px;display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--text-dim);}.legend-item{display:flex;align-items:center;gap:6px;}.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}.side{background:var(--bg-2);padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;max-height:calc(100vh - 110px);}.controls-inner{display:flex;align-items:center;gap:18px;padding:10px 18px;background:var(--bg-2);border-top:1px solid var(--border);flex-wrap:wrap;}.controls-inner .ctrl-group{gap:8px;}.controls-inner .progress{flex:1;min-width:120px;}.card{background:var(--bg-3);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}.card.now{background:linear-gradient(180deg,var(--bg-3),var(--bg-2));}.card-eyebrow{font-size:10.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--text-mute);margin-bottom:6px;font-weight:600;}.card h2{font-size:15px;font-weight:600;margin:0 0 6px;letter-spacing:-.01em;}.card p{color:var(--text-dim);margin:0;font-size:13px;}.step-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}.tag{font-size:10.5px;padding:3px 8px;border-radius:4px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text-dim);font-family:var(--mono);}.code-tabs{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;}.code-tab{font-size:11px;padding:4px 9px;border-radius:4px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-family:var(--mono);}.code-tab[aria-selected="true"]{background:var(--accent);color:#0a0a0b;border-color:var(--accent);}pre{margin:0;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--text-dim);white-space:pre-wrap;word-break:break-word;}code{color:inherit;}.actors ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}.actor-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:12.5px;transition:border-color .2s,background .2s;}.actor-row.active{border-color:var(--accent);background:rgba(126,131,255,.06);}.actor-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;}.actor-name{font-weight:500;}.actor-role{color:var(--text-mute);font-size:11.5px;margin-left:4px;}.ctrl-group{display:flex;align-items:center;gap:8px;}.ctrl-group.progress{flex:1;}.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:6px;background:var(--bg-3);color:var(--text);border:1px solid var(--border);cursor:pointer;font-size:13px;font-family:inherit;transition:background .15s,border-color .15s;}.btn:hover{background:var(--bg-elev);border-color:var(--border-strong);}.btn svg{width:16px;height:16px;}.btn.primary{background:var(--accent);color:#0a0a0b;border-color:var(--accent);font-weight:600;}.btn.primary:hover{background:#6e73ee;}.btn[disabled]{opacity:.5;cursor:not-allowed;}.slider label{font-size:12px;color:var(--text-dim);}input[type="range"]{-webkit-appearance:none;appearance:none;width:120px;background:transparent;}input[type="range"]::-webkit-slider-runnable-track{height:3px;background:var(--border-strong);border-radius:2px;}input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;background:var(--accent);border-radius:50%;margin-top:-5.5px;cursor:pointer;}input[type="range"]::-moz-range-track{height:3px;background:var(--border-strong);border-radius:2px;}input[type="range"]::-moz-range-thumb{width:14px;height:14px;background:var(--accent);border-radius:50%;cursor:pointer;border:0;}.mono{font-family:var(--mono);font-size:12px;color:var(--text-dim);}.bar{height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden;width:100%;}#barFill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .25s ease;}@media (max-width:960px){.layout{grid-template-columns:1fr;}.canvas-wrap{border-right:0;border-bottom:1px solid var(--border);}.side{max-height:none;}.topbar{flex-direction:column;align-items:stretch;gap:10px;}.tabs{overflow-x:auto;}}</style>
+</head>
+<body data-theme="dark">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" class="logo" aria-hidden="true">
+        <path fill="currentColor" d="M12 1.5 3 5v6.4c0 4.5 3.2 8.6 9 11 5.8-2.4 9-6.5 9-11V5l-9-3.5z"/>
+      </svg>
+      <div>
+        <div class="title">A+B+C Flow Studio</div>
+        <div class="subtitle">agent-oauth-poc · v2 — secuencias interactivas de los 3 flujos</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" data-flow="A" role="tab" aria-selected="true">
+        <span class="tab-letter">A</span>
+        <span class="tab-name">Auth Code + PKCE</span>
+        <span class="tab-rfc">RFC 6749 §4.1 + RFC 7636</span>
+      </button>
+      <button class="tab" data-flow="B" role="tab" aria-selected="false">
+        <span class="tab-letter">B</span>
+        <span class="tab-name">Device Code</span>
+        <span class="tab-rfc">RFC 8628</span>
+      </button>
+      <button class="tab" data-flow="C" role="tab" aria-selected="false">
+        <span class="tab-letter">C</span>
+        <span class="tab-name">On-Behalf-Of</span>
+        <span class="tab-rfc">RFC 7523 / 8693</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-wrap">
+      <div class="canvas-header">
+        <div class="canvas-title" id="flowTitle">Flujo A — Authorization Code + PKCE</div>
+        <div class="canvas-meta" id="flowMeta">Cargando…</div>
+      </div>
+      <div class="svg-host" id="svgHost">
+        <svg id="sequence" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="controls-inner">
+        <div class="ctrl-group">
+          <button id="btnPlay" class="btn primary" title="Play">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <span>Play</span>
+          </button>
+          <button id="btnStep" class="btn" title="Siguiente paso">
+            <svg viewBox="0 0 24 24"><path d="M6 5l8 7-8 7V5zm10 0h2v14h-2z" fill="currentColor"/></svg>
+            <span>Step</span>
+          </button>
+          <button id="btnReset" class="btn" title="Reiniciar">
+            <svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            <span>Reset</span>
+          </button>
+        </div>
+        <div class="ctrl-group slider">
+          <label for="speed">Velocidad</label>
+          <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1" />
+          <span id="speedVal" class="mono">1.0×</span>
+        </div>
+        <div class="ctrl-group progress">
+          <div class="bar"><div id="barFill"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card now">
+        <div class="card-eyebrow">Paso <span id="stepIdx">0</span> / <span id="stepTotal">0</span></div>
+        <h2 id="stepTitle">—</h2>
+        <p id="stepDesc">Pulsa <strong>Play</strong> para iniciar la animación.</p>
+        <div class="step-tags" id="stepTags"></div>
+      </div>
+
+      <div class="card code">
+        <div class="code-tabs" id="codeTabs"></div>
+        <pre><code id="codeBlock">// Selecciona un flujo y pulsa Play.</code></pre>
+      </div>
+
+      <div class="card jwt" id="jwtCard" hidden>
+        <div class="card-eyebrow">Claims del JWT recibido</div>
+        <pre><code id="jwtBlock">—</code></pre>
+      </div>
+
+      <div class="card actors" id="actorsCard">
+        <div class="card-eyebrow">Actores del flujo</div>
+        <ul id="actorsList"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+
+(function() {
+  const M = {};
+// ============================================================
+//  flows.js — specs declarativos de los 3 flujos
+//  Cada step = { from, to, label, kind: 'sync'|'reply'|'self',
+//                desc, code:{lang,...}, claims?, actor? }
+// ============================================================
+
+/** Plantilla para construir un actor con coordenadas calculadas después */
+const actor = (id, name, role, color) => ({ id, name, role, color });
+
+/** Helpers curl por flujo — *no* interpolan secretos reales */
+const curlA = (scope = 'calendar.read') => `# 1) Cliente pide authorize URL al agente (PKCE pair generada internamente)
+curl -s -X POST http://localhost:7000/agente/auth/authorize \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id":"ana","scope":"openid profile email ${scope}"}' | jq .`;
+const curlB = () => `# 1) Cliente pide device_code al agente
+curl -s -X POST http://localhost:7000/agente/auth/device \\
+  -H "Content-Type: application/json" \\
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}' | jq .`;
+const curlC = () => `# 3) Cliente pide OBO al agente (token de Ana -> token refinado)
+curl -s -X POST http://localhost:7000/agente/auth/obo \\
+  -H "Content-Type: application/json" \\
+  -d "{\"user_access_token\":\"$ACCESS_TOKEN\",\"requested_scope\":\"email.send\"}" | jq .`;
+
+// ============== FLUJO A: Auth Code + PKCE ==============
+const flowA = {
+  id: 'A',
+  title: 'Flujo A — Authorization Code + PKCE',
+  meta: 'RFC 6749 §4.1 · RFC 7636 · 8 mensajes · ~10-15s · navegador humano cerca',
+  actors: [
+    actor('user',   'Humano (Ana)',    'browser + MFA',   '#fde68a'),
+    actor('cliente','Cliente / App',  'invoca al agente','#a5b4fc'),
+    actor('agente', 'Agente IA',       'FastAPI :7000',   '#7e83ff'),
+    actor('mock',   'client-mock',     'webapp :3000',    '#c084fc'),
+    actor('idp',    'Keycloak / B2C',  'Authorization',   '#5eead4'),
+    actor('api',    'Spring Boot API', 'Resource :9090',  '#fb7185'),
+  ],
+  steps: [
+    {
+      from: 'cliente', to: 'agente',
+      kind: 'sync', label: 'POST /agente/auth/authorize  {user_id, scope}',
+      desc: 'El cliente pide al agente una URL de autorización con el scope deseado. El agente genera internamente un par PKCE (code_verifier + code_challenge = base64url(SHA256(verifier))).',
+      code: { bash: curlA('calendar.read'), python:
+`resp = requests.post(
+  "http://localhost:7000/agente/auth/authorize",
+  json={"user_id":"ana", "scope":"openid profile email calendar.read"},
+).json()
+print(resp["authorize_url"])` },
+      actor: 'agente',
+    },
+    {
+      from: 'agente', to: 'mock',
+      kind: 'sync', label: 'devuelve {authorize_url, code_verifier, state, redirect_uri}',
+      desc: 'El agente devuelve la URL completa y el code_verifier. El cliente (o su webapp client-mock) lo guarda hasta el callback.',
+      code: { json:
+`{
+  "authorize_url":   "http://localhost:8180/realms/agent-poc/protocol/openid-connect/auth?...&code_challenge=q1Z7...&code_challenge_method=S256",
+  "code_verifier":   "dBjftJeZ4CVP-...",
+  "state":           "af0ifjsldkj",
+  "redirect_uri":    "http://localhost:3000/auth/callback"
+}` },
+      actor: 'agente',
+    },
+    {
+      from: 'mock', to: 'user',
+      kind: 'sync', label: 'window.location = authorize_url',
+      desc: 'La webapp redirige el browser del humano a la página de login del IdP. Esto requiere un navegador real porque la PKCE depende del flujo estándar de OAuth.',
+      code: { html:
+`<!-- public/index.html -->
+<script>
+  const { authorize_url } = await fetch("/auth/authorize", {method:"POST", body:JSON.stringify({
+    user_id, scope
+  })}).then(r=>r.json());
+  window.location = authorize_url + "&prompt=login";
+<\/script>` },
+      actor: 'mock',
+    },
+    {
+      from: 'user', to: 'idp',
+      kind: 'sync', label: 'login + MFA (Passkey / TOTP)',
+      desc: 'El humano teclea usuario + password en el formulario del IdP y completa el MFA. Crucial: el agente nunca ve las credenciales. Con Passkey ni siquiera hay password.',
+      code: { note:
+'Aqu\u00ed el humano interact\u00faa. El agente no ve nada.\nEn KC: pantalla de login + passkey opcional.\nEn B2C External ID: flujo signup_signin_v1 con Passkey forzado.' },
+      actor: 'user',
+    },
+    {
+      from: 'idp', to: 'mock',
+      kind: 'reply', label: '302 → /auth/callback?code=...&state=...',
+      desc: 'Keycloak redirige al client-mock con el authorization code. El state protege contra CSRF.',
+      code: { http:
+`HTTP/1.1 302 Found
+Location: http://client-mock:3000/auth/callback
+  ?code=SplxlOBeZQQYbYS6WxSbIA
+  &state=af0ifjsldkj
+  &session_state=1234abcd` },
+      actor: 'idp',
+    },
+    {
+      from: 'mock', to: 'idp',
+      kind: 'sync', label: 'POST /token  (code + code_verifier)',
+      desc: 'Client-mock intercambia el code por tokens. Envía el code_verifier para que IdP valide el PKCE.',
+      code: { http:
+`POST /realms/agent-poc/protocol/openid-connect/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code=SplxlOBeZQQYbYS6WxSbIA
+&redirect_uri=http://client-mock:3000/auth/callback
+&client_id=client-mock
+&code_verifier=dBjftJeZ4CVP-...` },
+      actor: 'mock',
+    },
+    {
+      from: 'idp', to: 'mock',
+      kind: 'reply', label: '200 {access_token, refresh_token, id_token}',
+      desc: 'El IdP devuelve los 3 tokens. El access_token lleva el scope pedido. El refresh_token puede renovar access_tokens sin nueva pantalla de login.',
+      code: { json:
+`{
+  "access_token":  "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiJ9...",
+  "id_token":      "eyJhbGciOiJSUzI1NiIs...",
+  "expires_in":    300,
+  "token_type":    "Bearer",
+  "scope":         "openid profile email calendar.read"
+}`,
+      claims: {
+        iss: 'http://keycloak:8080/realms/agent-poc',
+        sub: 'f8a1d3e2-1b9c-4a8a-9e7f-...  (UUID de Ana)',
+        aud: ['agente-ia', 'spring-boot-api', 'account'],
+        azp: 'agente-ia',
+        scope: 'openid profile email calendar.read',
+        exp: 'now + 300s',
+        iat: 'now',
+        acr: '1', // KC normal; B2C Passkey ser\u00eda '2'
+      } },
+      actor: 'idp',
+    },
+    {
+      from: 'mock', to: 'cliente',
+      kind: 'reply', label: 'devuelve tokens al cliente',
+      desc: 'La webapp entrega los tokens al cliente por sesión segura o canal out-of-band.',
+      actor: 'mock',
+    },
+    {
+      from: 'cliente', to: 'agente',
+      kind: 'sync', label: 'POST /agente/call  {access_token, request, scope}',
+      desc: 'El cliente pasa al agente el access_token para que ejecute la acción pedida.',
+      actor: 'cliente',
+    },
+    {
+      from: 'agente', to: 'api',
+      kind: 'sync', label: 'GET /api/calendar/events  Bearer <token>',
+      desc: 'El agente llama al Resource Server con el JWT. Spring valida la firma contra la JWKS del IdP y el scope via @PreAuthorize("hasAuthority(\'SCOPE_calendar.read\')").',
+      code: { http:
+`GET /api/calendar/events?user_id=ana HTTP/1.1
+Host: spring-boot-api:9090
+Authorization: Bearer eyJhbGciOi...` },
+      actor: 'agente',
+    },
+    {
+      from: 'api', to: 'agente',
+      kind: 'reply', label: '200 {events: [...]}',
+      desc: 'Spring devuelve los eventos del calendario. Loguea [AUDIT] con sub y azp para trazabilidad.',
+      code: { json:
+`{
+  "user": "Ana Garc\u00eda",
+  "events": [
+    { "title": "Daily con Vicedo", "when": "2026-07-08T09:00Z" },
+    { "title": "Review PR #482",   "when": "2026-07-08T16:30Z" }
+  ]
+}` },
+      actor: 'api',
+    },
+  ],
+};
+
+// ============== FLUJO B: Device Code ==============
+const flowB = {
+  id: 'B',
+  title: 'Flujo B — Device Code',
+  meta: 'RFC 8628 · ~8 mensajes · agente headless · polling cada 5s',
+  actors: [
+    actor('cliente','Cliente / CLI / CI',  'headless',         '#a5b4fc'),
+    actor('agente', 'Agente IA',           'FastAPI :7000',    '#7e83ff'),
+    actor('idp',    'Keycloak / B2C',      'Authorization',    '#5eead4'),
+    actor('user',   'Humano (Ana)',        'smartphone / port\u00e1til','#fde68a'),
+    actor('api',    'Spring Boot API',     'Resource :9090',   '#fb7185'),
+  ],
+  steps: [
+    {
+      from: 'cliente', to: 'agente',
+      kind: 'sync', label: 'POST /agente/auth/device  {user_id, scope}',
+      desc: 'El cliente (CLI / CI) pide al agente que obtenga un device_code. No hay navegador del humano cerca.',
+      code: { bash: curlB(), python:
+`resp = requests.post(
+  "http://localhost:7000/agente/auth/device",
+  json={"user_id":"ana",
+        "scope":"openid profile email calendar.read"},
+).json()` },
+      actor: 'agente',
+    },
+    {
+      from: 'agente', to: 'idp',
+      kind: 'sync', label: 'POST /ext/ciba/auth/device_authorization',
+      desc: 'El agente pide un device_code al IdP. Algunos IdP exponen el endpoint en /protocol/openid-connect/auth/device (KC) o en /oauth2/v2.0/devicecode (B2C).',
+      code: { http:
+`POST /realms/agent-poc/protocol/openid-connect/auth/device HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+client_id=agente-ia
+&client_secret=secret-del-agente
+&scope=openid+profile+email+calendar.read` },
+      actor: 'agente',
+    },
+    {
+      from: 'idp', to: 'agente',
+      kind: 'reply', label: '200 {device_code, user_code, verification_uri}',
+      desc: 'El IdP devuelve los códigos. user_code es legible para el humano; device_code es secreto que solo intercambia el agente.',
+      code: { json:
+`{
+  "device_code":               "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+  "user_code":                 "ABCD-1234",
+  "verification_uri":          "http://localhost:8180/realms/agent-poc/device",
+  "verification_uri_complete": "http://localhost:8180/realms/agent-poc/device?user_code=ABCD-1234",
+  "expires_in":                600,
+  "interval":                  5
+}` },
+      actor: 'idp',
+    },
+    {
+      from: 'agente', to: 'cliente',
+      kind: 'reply', label: 'imprime user_code + verification_uri',
+      desc: 'El agente imprime en pantalla para el operador del CLI:\n  "Ve a http://idp/device e introduce: ABCD-1234"',
+      code: { bash:
+`$ ./agente-cli
+[Agente IA] device_code = GmRhmhcxhwA...
+[Agente IA] user_code   = ABCD-1234
+[Agente IA] URL         = http://localhost:8180/realms/agent-poc/device
+[Agente IA] Esperando aprobaci\u00f3n (expira en 600s)...` },
+      actor: 'agente',
+    },
+    {
+      from: 'user', to: 'idp',
+      kind: 'sync', label: 'GET /device → introduce user_code → Approve',
+      desc: 'En otro dispositivo, el humano introduce user_code y aprueba. Importante: NO toca password. Solo confirmación.',
+      code: { note:
+'Pantalla del IdP:\n  Tu c\u00f3digo: ABCD-1234\n  [ Approve ]   [ Deny ]' },
+      actor: 'user',
+    },
+    {
+      from: 'agente', to: 'idp',
+      kind: 'sync', label: 'POLLING POST /token  (cada interval=5s)',
+      desc: 'Mientras tanto el agente hace polling al endpoint /token del IdP. Si el humano ya aprobó, recibe tokens; si no, recibe authorization_pending.',
+      code: { http:
+`POST /realms/agent-poc/protocol/openid-connect/token HTTP/1.1
+
+grant_type=urn:ietf:params:oauth:grant-type:device_code
+&device_code=GmRhmhcxhwA...
+&client_id=agente-ia
+&client_secret=secret-del-agente
+
+# Respuestas posibles:
+# 200  {access_token,...}                   \u2190 OK
+# 400  {error: "authorization_pending"}     \u2190 seguir polling
+# 400  {error: "slow_down"}                 \u2190 subir interval
+# 400  {error: "access_denied"}             \u2190 parar
+# 400  {error: "expired_token"}             \u2190 device_code caducado` },
+      actor: 'agente',
+    },
+    {
+      from: 'idp', to: 'agente',
+      kind: 'reply', label: '200 {access_token, refresh_token, id_token}',
+      desc: 'El IdP devuelve tokens ya con el scope pedido y el sub del humano que aprobó.',
+      code: { json:
+`{ "access_token":  "eyJ...", "expires_in": 300,
+   "refresh_token": "eyJ...",
+   "token_type":    "Bearer",
+   "scope":         "openid profile email calendar.read" }`,
+      claims: {
+        iss:   'http://keycloak:8080/realms/agent-poc',
+        sub:   'f8a1d3e2-1b9c-4a8a-9e7f-...  (UUID de Ana)',
+        aud:   ['agente-ia', 'spring-boot-api'],
+        azp:   'agente-ia',
+        scope: 'openid profile email calendar.read',
+        exp:   'now + 300s',
+      } },
+      actor: 'idp',
+    },
+    {
+      from: 'agente', to: 'api',
+      kind: 'sync', label: 'GET /api/calendar/events',
+      desc: 'El agente llama ya con el JWT a la API.',
+      actor: 'agente',
+    },
+    {
+      from: 'api', to: 'agente',
+      kind: 'reply', label: '200 {events: [...]}',
+      desc: 'Devolución normal. Mismo flujo de auditoría que A.',
+      actor: 'api',
+    },
+  ],
+};
+
+// ============== FLUJO C: OBO ==============
+const flowC = {
+  id: 'C',
+  title: 'Flujo C — On-Behalf-Of (RFC 7523)',
+  meta: 'Requiere KC 26+ o Azure B2C External ID',
+  actors: [
+    actor('cliente','Cliente / App',  'tras A o B',            '#a5b4fc'),
+    actor('agente', 'Agente IA',       'FastAPI :7000',         '#7e83ff'),
+    actor('idp',    'Keycloak 26+ / B2C', 'Authorization',     '#5eead4'),
+    actor('api',    'Spring Boot API', 'Resource :9090',        '#fb7185'),
+  ],
+  steps: [
+    {
+      from: 'cliente', to: 'agente',
+      kind: 'sync', label: 'POST /agente/auth/obo  {user_access_token, requested_scope}',
+      desc: 'El cliente ya tiene un access_token del usuario (obtenido vía A o B) pero le falta el scope concreto. Pide al agente un token delegado.',
+      code: { bash: curlC() },
+      actor: 'agente',
+    },
+    {
+      from: 'agente', to: 'agente',
+      kind: 'self', label: 'decodifica JWT (sin verificar firma)',
+      desc: 'El agente mira el scope actual del JWT. Si requested_scope ya est\u00e1 dentro, salta el OBO y reutiliza.',
+      code: { python:
+`import jwt  # PyJWT
+claims = jwt.decode(
+  user_access_token,
+  options={"verify_signature": False},
+)
+have = set(claims.get("scope","").split())
+need = set(requested_scope.split())
+missing = need - have
+if not missing:
+  # ya tengo lo necesario \u2192 no OBO
+  return user_access_token` },
+      actor: 'agente',
+    },
+    {
+      from: 'agente', to: 'idp',
+      kind: 'sync', label: 'POST /token  grant_type=jwt-bearer',
+      desc: 'El agente intercambia el JWT del usuario por un nuevo token con scope más limitado. La firma del IdP garantiza que el JWT es válido.',
+      code: { http:
+`POST /oauth2/v2.0/token HTTP/1.1  # B2C; KC26: /protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+&assertion=<user_access_token>
+&requested_token_use=on_behalf_of
+&requested_scope=email.send
+&client_id=agente-ia
+&client_secret=secret-del-agente` },
+      actor: 'agente',
+    },
+    {
+      from: 'idp', to: 'agente',
+      kind: 'reply', label: '200 {access_token refinado}',
+      desc: 'El IdP emite un NUEVO access_token con scope=puntual (email.send). Valida la firma del JWT entrante, que la aserción incluye sub del humano.',
+      code: { json:
+`{
+  "access_token": "eyJ... <NUEVO, scope=email.send>",
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "token_type":        "Bearer",
+  "expires_in":        300,
+  "scope":             "email.send"
+}`,
+      claims: {
+        iss:   'https://<tenant>.ciamlogin.com/...',
+        sub:   'f8a1d3e2-...  (UUID de Ana)',
+        aud:   ['spring-boot-api', 'agente-ia'],
+        azp:   'agente-ia',
+        scope: 'email.send',                                 // M\u00cdNIMO
+        exp:   'now + 300s',
+        act:   { sub: 'agente-ia' },                        // act = qui\u00e9n opera
+      } },
+      actor: 'idp',
+    },
+    {
+      from: 'agente', to: 'api',
+      kind: 'sync', label: 'POST /api/email/send  Bearer <refinado>',
+      desc: 'El agente llama a Spring con el scope MÍNIMO (email.send). Spring valida id\u00e9ntico.',
+      actor: 'agente',
+    },
+    {
+      from: 'api', to: 'agente',
+      kind: 'reply', label: '200 {sent: true}',
+      desc: 'Acuse de la API. Log: [AUDIT] sub=ana azp=agente-ia scope=email.send.',
+      actor: 'api',
+    },
+  ],
+};
+
+const FLOWS = { A: flowA, B: flowB, C: flowC };
+
+// ============================================================
+//  render.js — SVG sequence renderer
+//  Dibuja actores + lifelines + mensajes animados.
+//  Expone renderFlow(container, flowSpec, currentIdx)
+// ============================================================
+
+const NS = 'http://www.w3.org/2000/svg';
+const ACTOR_W   = 116;
+const ACTOR_H   = 56;
+const ACTOR_GAP = 44;
+const TOP_PAD   = 30;
+const LEFT_PAD  = 16;
+const MESSAGE_GAP = 54;
+
+const COLORS = {
+  bg:    '#0a0a0b',
+  actorBg:   '#111114',
+  actorBgActive: '#1e1e26',
+  actorBorder: '#2a2a33',
+  lifeline: '#1f1f27',
+  lifelineActive: '#3a3a45',
+  msg:    '#c9c9d2',
+  msgReply: '#6ee7b7',
+  msgPending: '#5c5c66',
+  label:  '#e7e7ea',
+  labelDim: '#8b8b95',
+};
+
+/** Crea elemento SVG */
+const svgEl = (tag, attrs = {}, children = []) => {
+  const el = document.createElementNS(NS, tag);
+  for (const k in attrs) {
+    el.setAttribute(k, attrs[k]);
+  }
+  for (const c of children) el.appendChild(c);
+  return el;
+};
+
+/** Texto con tspan si es multilínea */
+const textEl = (text, x, y, opts = {}) => {
+  const t = svgEl('text', {
+    x, y,
+    fill: opts.fill || COLORS.label,
+    'font-size': opts.size || 12,
+    'font-family': opts.family || 'Inter, sans-serif',
+    'text-anchor': opts.anchor || 'start',
+    'font-weight': opts.weight || 400,
+    'letter-spacing': opts.tracking || '0',
+  });
+  const lines = String(text).split('\n');
+  lines.forEach((line, i) => {
+    const ts = svgEl('tspan', {
+      x,
+      dy: i === 0 ? '0' : '1.2em',
+    });
+    ts.textContent = line;
+    t.appendChild(ts);
+  });
+  return t;
+};
+
+/** Layout: posición X de cada actor */
+function actorXMap(actors, renderWidth, actorW = ACTOR_W, actorGap = ACTOR_GAP) {
+  const total = actors.length * actorW + (actors.length - 1) * actorGap;
+  const startX = LEFT_PAD + Math.max(0, (renderWidth - total) / 2);
+  const map = {};
+  actors.forEach((a, i) => {
+    map[a.id] = startX + i * (actorW + actorGap) + actorW / 2;
+  });
+  return map;
+}
+
+/** Altura total del SVG según número de pasos */
+function heightForSteps(n) {
+  return TOP_PAD + ACTOR_H + 14 + Math.max(1, n) * MESSAGE_GAP + 60;
+}
+
+/** Render inicial del flow con todos los actores y lifelines, mensajes vacíos. */
+function renderFlow(svgEl_, flow, currentIdx = -1, containerWidthHint = 0) {
+  // Limpiar
+  while (svgEl_.firstChild) svgEl_.removeChild(svgEl_.firstChild);
+
+  // Tomar el ancho del contenedor padre (svgHost) que sí está renderizado por CSS
+  // (el SVG en sí no tiene width al inicio). Si falla, fallback a 1100.
+  let containerWidth = containerWidthHint || svgEl_.clientWidth || 0;
+  if (!containerWidth) {
+    const parent = svgEl_.parentElement;
+    containerWidth = parent ? (parent.clientWidth - 32) : 1100;
+  }
+  if (!containerWidth) containerWidth = 1100;
+  const height = heightForSteps(flow.steps.length);
+
+  // Ancho natural = N*ACTOR_W + (N-1)*ACTOR_GAP + 2*LEFT_PAD
+  const nActors = flow.actors.length;
+  let ACTOR_W_USE = ACTOR_W;
+  let ACTOR_GAP_USE = ACTOR_GAP;
+  let renderWidth = LEFT_PAD * 2 + nActors * ACTOR_W + (nActors - 1) * ACTOR_GAP;
+
+  // Si no caben todos los actores en containerWidth (con margen de -8px),
+  // reescalamos a un packing más compacto. RenderWidth final <= containerWidth.
+  if (renderWidth - 8 > containerWidth && nActors > 4) {
+    const usableWidth = containerWidth - LEFT_PAD * 2 - 8;
+    const minActorW = 76;
+    const minGap = 24;
+    const x = (usableWidth - (nActors - 1) * minGap) / nActors;
+    if (x >= minActorW) {
+      ACTOR_W_USE = x;
+      ACTOR_GAP_USE = minGap;
+      renderWidth = usableWidth + 8;
+    } else {
+      // Aun con minActorW no cabe: limitamos al container y permitimos scroll.
+      renderWidth = containerWidth;
+      ACTOR_W_USE = Math.min(ACTOR_W, (containerWidth - LEFT_PAD * 2 - (nActors - 1) * ACTOR_GAP) / nActors);
+    }
+  }
+
+  const xMap = actorXMap(flow.actors, renderWidth, ACTOR_W_USE, ACTOR_GAP_USE);
+
+  // Si el renderWidth es > containerWidth + 8, activamos scroll horizontal.
+  // De lo contrario, el SVG escala a 100% del container sin scroll.
+  svgEl_.setAttribute('viewBox', `0 0 ${renderWidth} ${height}`);
+  svgEl_.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+  if (renderWidth > containerWidth + 8) {
+    svgEl_.setAttribute('width', renderWidth);
+  } else {
+    svgEl_.removeAttribute('width');
+  }
+  svgEl_.setAttribute('height', height);
+
+  // --- Líneas de fondo (lifelines) ---
+  const lifelinesGroup = svgEl('g', { class: 'lifelines' });
+  flow.actors.forEach((a) => {
+    const x = xMap[a.id];
+    const line = svgEl('line', {
+      x1: x, x2: x,
+      y1: TOP_PAD + ACTOR_H + 4,
+      y2: height - 20,
+      stroke: COLORS.lifeline,
+      'stroke-width': 1,
+      'stroke-dasharray': '4 5',
+    });
+    line.setAttribute('data-actor', a.id);
+    lifelinesGroup.appendChild(line);
+  });
+  svgEl_.appendChild(lifelinesGroup);
+
+  // --- Cajas de actor ---
+  const actorsGroup = svgEl('g', { class: 'actors' });
+  flow.actors.forEach((a) => {
+    const x = xMap[a.id] - ACTOR_W / 2;
+    const y = TOP_PAD;
+    const g = svgEl('g', {
+      class: 'actor',
+      'data-actor': a.id,
+      style: `cursor:pointer`,
+    });
+    // Fondo
+    g.appendChild(svgEl('rect', {
+      x, y,
+      width: ACTOR_W_USE, height: ACTOR_H,
+      rx: 8, ry: 8,
+      fill: COLORS.actorBg,
+      stroke: a.color,
+      'stroke-width': 1.2,
+      opacity: 0.95,
+    }));
+    // Color dot
+    g.appendChild(svgEl('circle', {
+      cx: x + 14, cy: y + 14, r: 4,
+      fill: a.color,
+    }));
+    // Nombre (centrado en el ancho del actor)
+    const nameX = x + ACTOR_W_USE / 2;
+    g.appendChild(textEl(a.name, nameX, y + 18, {
+      size: Math.min(12, ACTOR_W_USE / 9), weight: 600,
+      anchor: 'middle',
+    }));
+    // Rol
+    g.appendChild(textEl(a.role, nameX, y + 36, {
+      size: 10.5,
+      fill: COLORS.labelDim,
+      anchor: 'middle',
+    }));
+    g.appendChild(textEl(a.id.toUpperCase(), nameX, y + 50, {
+      size: 9.5, weight: 700,
+      fill: a.color,
+      family: 'JetBrains Mono, monospace',
+      tracking: '0.1em',
+      anchor: 'middle',
+    }));
+    actorsGroup.appendChild(g);
+  });
+  svgEl_.appendChild(actorsGroup);
+
+  // --- Mensajes ---
+  const messagesGroup = svgEl('g', { class: 'messages' });
+  flow.steps.forEach((s, i) => {
+    const g = svgEl('g', { class: 'message', 'data-step': i });
+    const y = TOP_PAD + ACTOR_H + MESSAGE_GAP * (i + 0.5) + 14;
+    const fromX = xMap[s.from];
+    const toX   = xMap[s.to];
+    messagesGroup.appendChild(svgEl('rect', {
+      class: 'msg-bg',
+      x: 0, y: y - 14,
+      width: renderWidth, height: MESSAGE_GAP - 8,
+      fill: 'transparent',
+      'data-row': i,
+    }));
+
+    if (s.kind === 'self') {
+      // Self-loop sobre el actor 'from'
+      const w = 40, h = 22;
+      g.appendChild(svgEl('path', {
+        d: `M ${fromX} ${y - 14}
+            q ${w} 0 ${w} ${h}
+            l 0 ${h * 0.6}
+            M ${fromX + w * 0.15} ${y - 14 + h * 1.6}
+            l ${w * 0.15} ${-h * 0.5}
+            l ${-w * 0.3} 0 z`,
+        fill: 'none',
+        stroke: COLORS.msg,
+        'stroke-width': 1.6,
+        'marker-end': 'none',
+      }));
+      g.appendChild(textEl(s.label, fromX + w + 10, y + h, {
+        size: 11,
+        fill: COLORS.msg,
+      }));
+    } else {
+      // Flecha entre from y to
+      const isReply = s.kind === 'reply';
+      const colour  = isReply ? COLORS.msgReply : COLORS.msg;
+      const dash    = isReply ? '4 4' : 'none';
+      const arrowId = `arrow-${i}`;
+      g.appendChild(svgEl('defs', {}, [
+        svgEl('marker', {
+          id: arrowId,
+          viewBox: '0 0 10 10',
+          refX: '9', refY: '5',
+          markerWidth: '7', markerHeight: '7',
+          orient: 'auto-start-reverse',
+        }, [
+          svgEl('path', { d: 'M0,0 L10,5 L0,10 z', fill: colour }),
+        ]),
+      ]));
+
+      // Línea
+      const line = svgEl('line', {
+        x1: fromX, x2: toX, y1: y, y2: y,
+        stroke: colour,
+        'stroke-width': 1.5,
+        'stroke-dasharray': dash,
+        'marker-end': `url(#${arrowId})`,
+        'data-line': i,
+      });
+      g.appendChild(line);
+
+      // Etiqueta encima de la flecha (con halo)
+      const labelX = (fromX + toX) / 2;
+      const labelText = s.label;
+      const dim = labelText.length > 70;
+      const t = textEl(labelText, labelX, y - 8, {
+        size: dim ? 10.5 : 11.5,
+        fill: COLORS.label,
+        anchor: 'middle',
+        weight: isReply ? 500 : 500,
+      });
+      g.appendChild(t);
+    }
+
+    messagesGroup.appendChild(g);
+  });
+  svgEl_.appendChild(messagesGroup);
+
+  // --- Aplicar estado actual ---
+  applyState(svgEl_, flow, currentIdx, xMap, renderWidth);
+}
+
+/** Actualiza el SVG para resaltar el paso currentIdx */
+function applyState(svgEl_, flow, currentIdx, xMapOpt = null) {
+  // Recuperamos el ancho del viewBox (que es renderWidth).
+  const viewBox = svgEl_.getAttribute('viewBox') || `0 0 ${svgEl_.clientWidth || 1100} 800`;
+  const renderWidth = parseFloat(viewBox.split(' ')[2]) || (svgEl_.clientWidth || 1100);
+  const xMap = xMapOpt || actorXMap(flow.actors, renderWidth);
+
+  // Activar/desactivar actores
+  const involved = new Set();
+  flow.steps.slice(0, currentIdx + 1).forEach((s) => {
+    involved.add(s.from);
+    if (s.to !== s.from) involved.add(s.to);
+  });
+  // Para el "current step", también se iluminan los del mensaje que se va a representar (currentIdx + 0 → siguiente paso a animar)
+  const upcoming = flow.steps[currentIdx + 1];
+  const activePair = new Set();
+  if (upcoming) {
+    involved.delete(upcoming.from);
+    if (upcoming.to !== upcoming.from) involved.delete(upcoming.to);
+    activePair.add(upcoming.from);
+    if (upcoming.to !== upcoming.from) activePair.add(upcoming.to);
+  }
+
+  svgEl_.querySelectorAll('[data-actor]').forEach((g) => {
+    const id = g.getAttribute('data-actor');
+    const isInvolved = involved.has(id);
+    const isActive   = activePair.has(id);
+    const tagName = g.tagName.toLowerCase();
+    // Tanto las cajas de actor (g .actor) como las lifelines (line) tienen data-actor.
+    const stroke = (isActive || isInvolved) ? COLORS.lifelineActive : COLORS.lifeline;
+    const strokeWidth = isActive ? 1.5 : 1;
+    if (tagName === 'line') {
+      g.setAttribute('stroke', stroke);
+      g.setAttribute('stroke-width', strokeWidth);
+      return;
+    }
+    const rect = g.querySelector('rect');
+    if (rect) {
+      rect.setAttribute('fill', isActive ? COLORS.actorBgActive : COLORS.actorBg);
+      rect.setAttribute('stroke-width', isActive ? 2 : 1.2);
+      rect.setAttribute('opacity', isInvolved || isActive ? '1' : '0.55');
+    }
+  });
+
+  // Resaltar mensaje correspondiente al currentIdx
+  const messageNodes = svgEl_.querySelectorAll('.message');
+  messageNodes.forEach((node) => {
+    const idx = parseInt(node.getAttribute('data-step'), 10);
+    const visible = idx <= currentIdx;
+    const active = idx === currentIdx || idx === currentIdx + 1;
+    node.style.opacity = visible || active ? 1 : 0.15;
+    const line = node.querySelector('line');
+    if (line) {
+      const s = flow.steps[idx];
+      const isReply = s.kind === 'reply';
+      const targetStroke = (idx === currentIdx) ? (isReply ? '#6ee7b7' : '#7e83ff') :
+                           (visible ? (isReply ? COLORS.msgReply : COLORS.msg) : COLORS.msgPending);
+      line.setAttribute('stroke', targetStroke);
+      line.setAttribute('stroke-width', active ? 2.2 : 1.5);
+    }
+    // Self-loop is path
+    const path = node.querySelector('path[fill=none]');
+    if (path && active) path.setAttribute('stroke-width', 2.2);
+  });
+}
+
+/** Resaltar actor en panel lateral */
+function highlightSideActor(flow, actorId) {
+  // (Lógica se delega a app.js para mantener separación)
+  document.dispatchEvent(new CustomEvent('actor-focus', { detail: { actorId } }));
+}
+
+/** Devuelve ids orden de actores del flow */
+function getFlowActorIds(flow) {
+  return flow.actors.map((a) => a.id);
+}
+
+  // Envoltorio: exponer FLOWS + helpers
+  const M2 = {
+    FLOWS,
+    renderFlow,
+    applyState,
+    getFlowActorIds,
+  };
+  window.FLOWSTUDIO = M2;
+})();
+// ============================================================
+//  app.js — orquestador: estado, tabs, controles, panel lateral
+// ============================================================
+const { FLOWS } = window.FLOWSTUDIO;
+const { renderFlow, applyState, getFlowActorIds } = window.FLOWSTUDIO;
+
+// ---------- Estado ----------
+const state = {
+  flowId: 'A',
+  step: -1,                  // -1 = ningún paso mostrado
+  playing: false,
+  timer: null,
+  speed: 1,
+};
+
+// ---------- Helpers DOM ----------
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => Array.from(document.querySelectorAll(q));
+
+function setSpeed(val) {
+  state.speed = val;
+  $('#speedVal').textContent = `${val.toFixed(2)}\u00d7`;
+  // Si estamos reproduciendo, recalculamos el delay del próximo tick.
+  if (state.playing && state.timer) {
+    clearTimeout(state.timer);
+    state.timer = setTimeout(tick, msForStep());
+  }
+}
+function msForStep() {
+  return Math.max(200, 1700 / state.speed);
+}
+
+// ---------- Cambio de flujo ----------
+function setFlow(id) {
+  state.flowId = id;
+  state.step = -1;
+  state.playing = false;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  $('#btnPlay').lastElementChild.textContent = 'Play';
+
+  // UI tabs
+  $$('.tab').forEach((b) => {
+    const on = b.dataset.flow === id;
+    b.setAttribute('aria-selected', String(on));
+  });
+
+  const flow = FLOWS[id];
+  $('#flowTitle').textContent = flow.title;
+  $('#flowMeta').textContent = flow.meta;
+
+  // Pasamos el ancho del svgHost como hint al renderer, porque en el primer
+  // render del DOMContentLoaded el SVG todavía no tiene clientWidth propio.
+  const svgHost = $('#svgHost');
+  const hint = svgHost.clientWidth || svgHost.offsetWidth || 0;
+  renderFlow($('#sequence'), flow, -1, hint);
+  renderLegend(flow);
+  renderSideActors(flow);
+  renderStep(flow, -1);
+
+  $('#barFill').style.width = '0%';
+}
+
+// ---------- Legend ----------
+function renderLegend(flow) {
+  $('#legend').innerHTML = flow.actors.map((a) => `
+    <span class="legend-item">
+      <span class="legend-dot" style="background:${a.color}"></span>
+      <span>${a.name}</span>
+    </span>
+  `).join('') + `
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#6ee7b7"></span>
+      <span style="color:var(--text-mute)">respuesta</span>
+    </span>
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#c9c9d2"></span>
+      <span style="color:var(--text-mute)">petici\u00f3n</span>
+    </span>
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#7e83ff"></span>
+      <span style="color:var(--text-mute)">paso activo</span>
+    </span>
+  `;
+}
+
+// ---------- Side panel ----------
+function renderSideActors(flow) {
+  $('#actorsList').innerHTML = flow.actors.map((a) => `
+    <li class="actor-row" data-actor="${a.id}">
+      <span class="actor-swatch" style="background:${a.color}"></span>
+      <span class="actor-name">${a.name}</span>
+      <span class="actor-role">${a.role}</span>
+    </li>
+  `).join('');
+  $('#actorsList').querySelectorAll('.actor-row').forEach((row) => {
+    row.addEventListener('click', () => focusActor(row.dataset.actor));
+  });
+}
+
+function focusActor(actorId) {
+  $$('#actorsList .actor-row').forEach((row) => {
+    row.classList.toggle('active', row.dataset.actor === actorId);
+  });
+}
+
+document.addEventListener('actor-focus', (e) => {
+  focusActor(e.detail.actorId);
+});
+
+function renderStep(flow, idx) {
+  // idx = -1 (sin pasos mostrados), 0..n (último paso mostrado)
+  const total = flow.steps.length;
+
+  // Step idx = currentIdx = "el ÚLTIMO paso mostrado"
+  // El "paso actual" de la animación conceptualmente es idx+1 (próximo a animar).
+  // Para mostrar card con "paso en pantalla" usamos idx+1 cuando reproduciendo activo,
+  // pero preferimos mostrar el paso con idx = currentIdx+1 = "siguiente a animar".
+  const upcoming = flow.steps[idx + 1];
+  const card = upcoming || flow.steps[total - 1];
+  const displayStep = idx + 2;  // humana: 1-based
+
+  $('#stepIdx').textContent = upcoming ? displayStep : total;
+  $('#stepTotal').textContent = total;
+  if (!card) {
+    $('#stepTitle').textContent = '\u2014';
+    $('#stepDesc').innerHTML = 'Pulsa <strong>Play</strong> para iniciar la animaci\u00f3n.';
+    $('#stepTags').innerHTML = '';
+    $('#codeBlock').textContent = '// Selecciona un flujo y pulsa Play.';
+    $('#jwtCard').hidden = true;
+    return;
+  }
+
+  $('#stepTitle').textContent = card.label;
+  $('#stepDesc').textContent = card.desc;
+
+  // Tags
+  const tags = [`${card.from}\u2192${card.to}`];
+  tags.push(card.kind === 'sync' ? 'sync' : (card.kind === 'reply' ? 'respuesta' : 'self'));
+  if (card.claims) tags.push('JWT con claims');
+  if (card.code) tags.push(...Object.keys(card.code).map((k) => `code:${k}`));
+  $('#stepTags').innerHTML = tags.map((t) => `<span class="tag">${t}</span>`).join('');
+
+  // Código: mostramos por defecto bash si está, si no el primer lenguaje disponible
+  const codeLangs = card.code ? Object.keys(card.code) : [];
+  if (codeLangs.length === 0) {
+    $('#codeBlock').textContent = '// Sin c\u00f3digo para este paso.';
+    $$('#codeTabs').forEach((c) => c.innerHTML = '');
+  } else {
+    showCodeBlock(card, codeLangs[0]);
+  }
+
+  // JWT
+  if (card.claims) {
+    $('#jwtCard').hidden = false;
+    $('#jwtBlock').textContent = JSON.stringify(card.claims, null, 2);
+  } else {
+    $('#jwtCard').hidden = true;
+  }
+
+  // Actor highlight
+  const focused = new Set([card.from]);
+  if (card.to !== card.from) focused.add(card.to);
+  $$('#actorsList .actor-row').forEach((row) => {
+    row.classList.toggle('active', focused.has(row.dataset.actor));
+  });
+}
+
+function showCodeBlock(card, lang) {
+  const container = $('#codeTabs');
+  // Si los tabs ya renderizados no se corresponden con los lenguajes de este step,
+  // los regeneramos. Mantenemos el step actual en closure con dataset del container.
+  const langs = Object.keys(card.code);
+  const same = container._langs && container._langs.length === langs.length
+    && container._langs.every((l, i) => l === langs[i]);
+  if (!same) {
+    container._langs = langs;
+    container._currentCard = card;
+    container.innerHTML = '';
+    langs.forEach((l) => {
+      const b = document.createElement('button');
+      b.className = 'code-tab';
+      b.dataset.lang = l;
+      b.textContent = l;
+      b.addEventListener('click', () => showCodeBlock(container._currentCard, l));
+      container.appendChild(b);
+    });
+  } else {
+    container._currentCard = card;  // refresca por si cambió el step
+  }
+  $$('#codeTabs .code-tab').forEach((t) =>
+    t.setAttribute('aria-selected', String(t.dataset.lang === lang))
+  );
+  $('#codeBlock').textContent = card.code[lang];
+}
+
+// ---------- Playback ----------
+function tick() {
+  const flow = FLOWS[state.flowId];
+  if (state.step < flow.steps.length - 1) {
+    state.step++;
+    renderStep(flow, state.step);
+    applyState($('#sequence'), flow, state.step);
+
+    $('#barFill').style.width = `${((state.step + 1) / flow.steps.length) * 100}%`;
+
+    if (state.playing) {
+      state.timer = setTimeout(tick, msForStep());
+    }
+  } else {
+    stop();
+  }
+}
+function play() {
+  const flow = FLOWS[state.flowId];
+  if (state.step >= flow.steps.length - 1) {
+    // Restart
+    state.step = -1;
+  }
+  state.playing = true;
+  $('#btnPlay').lastElementChild.textContent = 'Pause';
+  tick();
+}
+function stop() {
+  state.playing = false;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  $('#btnPlay').lastElementChild.textContent = 'Play';
+}
+function stepOnce() {
+  const flow = FLOWS[state.flowId];
+  if (state.step >= flow.steps.length - 1) return;
+  stop();
+  tick();
+}
+function reset() {
+  stop();
+  const flow = FLOWS[state.flowId];
+  state.step = -1;
+  renderStep(flow, -1);
+  applyState($('#sequence'), flow, -1);
+  $('#barFill').style.width = '0%';
+}
+
+// ---------- Init ----------
+function init() {
+  // Tabs
+  $$('.tab').forEach((b) =>
+    b.addEventListener('click', () => {
+      $$('.tab').forEach((x) => x.setAttribute('aria-selected', 'false'));
+      b.setAttribute('aria-selected', 'true');
+      setFlow(b.dataset.flow);
+    })
+  );
+
+  // Controles
+  $('#btnPlay').addEventListener('click', () => {
+    if (state.playing) stop();
+    else play();
+  });
+  $('#btnStep').addEventListener('click', stepOnce);
+  $('#btnReset').addEventListener('click', reset);
+  $('#speed').addEventListener('input', (e) => setSpeed(parseFloat(e.target.value)));
+
+  // Resize
+  const ro = new ResizeObserver(() => {
+    setFlow(state.flowId);
+  });
+  ro.observe($('#svgHost'));
+
+  setSpeed(1);
+  setFlow(state.flowId); // por defecto A
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+
+</script>
+</body>
+</html>
