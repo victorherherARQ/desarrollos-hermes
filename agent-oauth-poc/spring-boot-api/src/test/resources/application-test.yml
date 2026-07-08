@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: apigee-stub-test
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # En tests corremos FUERA del docker network, así que usamos el
+          # puerto host 8180 que KC publica. En runtime normal, este override
+          # lo aplica la variable de entorno KEYCLOAK_ISSUER_URI que apunta a
+          # http://keycloak:8080/realms/agent-poc (docker DNS).
+          issuer-uri: http://localhost:8180/realms/agent-poc
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.poc.api: INFO
+    org.springframework.security: INFO

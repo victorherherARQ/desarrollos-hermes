@@ -12,7 +12,10 @@ spring:
         jwt:
           # Keycloak como IdP (realm agent-poc). Spring Boot descubre el
           # endpoint JWKs automáticamente a partir del issuer-uri.
-          issuer-uri: http://keycloak:8080/realms/agent-poc
+          # IMPORTANTE: usamos el nombre real del contenedor KC porque
+          # arranca via `docker run` (no recibe el alias de servicio `keycloak`
+          # que solo aporta `docker compose`).
+          issuer-uri: http://agent-poc-keycloak:8080/realms/agent-poc
 
 # ──────────────────────────────────────────────────────────────
 # Actuator

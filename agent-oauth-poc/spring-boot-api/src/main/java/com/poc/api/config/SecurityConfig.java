@@ -1,5 +1,7 @@
 package com.poc.api.config;
 
+import com.poc.api.security.JwtAudienceValidator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.convert.converter.Converter;
@@ -9,7 +11,12 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.SecurityFilterChain;
@@ -32,6 +39,13 @@ import java.util.stream.Collectors;
 @EnableMethodSecurity   // habilita @PreAuthorize("hasAuthority('SCOPE_xxx')") en controllers
 public class SecurityConfig {
 
+    /**
+     * Audience que este Resource Server exige en el claim {@code aud} del JWT.
+     * Debe coincidir con lo que Keycloak emite en el access_token
+     * (configurado a nivel de cliente en el realm {@code agent-poc}).
+     */
+    private static final String EXPECTED_AUDIENCE = "spring-boot-api";
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -53,6 +67,31 @@ public class SecurityConfig {
             );
 
         return http.build();
+    }
+
+    /**
+     * JwtDecoder explícito: usa {@link NimbusJwtDecoder} construido a partir
+     * del issuer-uri (que descubre el endpoint JWKS automáticamente) y le
+     * enchufa un validador delegado compuesto por:
+     * <ul>
+     *   <li>Default validators de Spring (exp, nbf, iss)</li>
+     *   <li>Nuestro {@link JwtAudienceValidator}</li>
+     * </ul>
+     *
+     * <p>Sin este @Bean, Spring auto-configura un {@code NimbusJwtDecoder} sólo
+     * con los validators por defecto — y NO audita {@code aud}.</p>
+     */
+    @Bean
+    public JwtDecoder jwtDecoder(
+            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri
+    ) {
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
+
+        OAuth2TokenValidator<Jwt> defaults = JwtValidators.createDefaultWithIssuer(issuerUri);
+        OAuth2TokenValidator<Jwt> audience = new JwtAudienceValidator(EXPECTED_AUDIENCE);
+
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaults, audience));
+        return decoder;
     }
 
     /**
