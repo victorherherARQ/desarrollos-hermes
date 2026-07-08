@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import uuid
 from typing import Any
 
 import httpx
@@ -162,7 +163,26 @@ class CallResponse(BaseModel):
     result: Any
 
 
-# ─── Endpoints ──────────────────────────────────────────────────────────────
+# ─── FLUJO C (IDENTIDAD): modelos de request/response ────────────────────
+class IdentityRequest(BaseModel):
+    """Datos identificativos que el cliente pasa al agente en lugar de voz."""
+
+    user_id: str = Field(..., min_length=1, description="ID del usuario registrado")
+    dni:     str = Field(..., min_length=8, max_length=12, description="DNI/NIF (8 dígitos + letra)")
+    dob:     str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$", description="Fecha ISO-8601 YYYY-MM-DD")
+    scope:   str = Field(..., min_length=1, description="Scope OAuth pedido")
+
+
+class IdentityResponse(BaseModel):
+    """Respuesta tras verificar DNI+DOB + disparar push al móvil."""
+
+    challenge_id:    str
+    verification_uri: str
+    expires_in:      int
+    acr:             str
+
+
+# ─── Endpoints ────────────────────────────────────────────────────────
 @app.get("/agente/health")
 async def health() -> dict:
     logger.debug("health check")
@@ -170,7 +190,12 @@ async def health() -> dict:
         "status": "UP",
         "idp_issuer": IDP_ISSUER,
         "agent_client_id": AGENT_CLIENT_ID,
-        "supported_flows": ["A:auth_code+pkce", "B:device_code", "C:obo"],
+        "supported_flows": [
+            "A:auth_code+pkce",
+            "B:device_code",
+            "C:obo",
+            "C:identity",  # identidad con DNI+DOB (sin voz)
+        ],
     }
 
 
@@ -276,7 +301,86 @@ async def auth_device_poll(req: DeviceRequest) -> TokenResponse:
     )
 
 
-# ─── Endpoint unificado: ejecutar la acción del agente ──────────────────────
+    # ─── FLUJO C (IDENTIDAD): endpoint + push mock + polling ─────────────
+@app.post("/agente/auth/identity", response_model=IdentityResponse)
+async def auth_identity(req: IdentityRequest) -> IdentityResponse:
+    """
+    FLUJO C (versión sin voz): el humano NO tiene sesión web abierta.
+
+    El cliente (webapp, CLI, IVR) recoge DNI + fecha de nacimiento del humano
+    por un canal seguro y los pasa al agente. El agente verifica la identidad
+    contra la tabla interna y, si coincide, inicia el push step-up al móvil
+    del humano para MFA.
+
+    Pasos:
+      1. Verificar DNI + DOB contra tabla interna (verify_identity)
+      2. Si coincide, crear identity_assertion JWT firmada por el agente
+      3. Disparar push al device del usuario (en PoC: log + URL mock)
+      4. Devolver challenge_id al cliente para que haga polling
+    """
+    logger.info(
+        "[C/Identity] Solicitud para user_id=%s (DNI len=%d, DOB=%s)",
+        req.user_id, len(req.dni), req.dob,
+    )
+
+    # 1. Verificar identidad
+    if not verify_identity(req.user_id, req.dni, req.dob):
+        logger.warning("[C/Identity] DNI/DOB NO coincide para user_id=%s", req.user_id)
+        raise HTTPException(status_code=401, detail="Credenciales identificativas inválidas")
+
+    user = get_user(req.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail=f"Usuario '{req.user_id}' no registrado")
+
+    # 2. Crear identity-assertion JWT
+    challenge_id = str(uuid.uuid4())
+    iat = int(time.time())
+    exp = iat + 120  # 2 min
+
+    identity_assertion = {
+        "iss":             AGENT_CLIENT_ID,
+        "sub":             req.user_id,
+        "aud":             IDP_ISSUER,
+        "iat":             iat,
+        "exp":             exp,
+        "jti":             challenge_id,
+        "acr":             "id-claim",
+        "auth_time":       iat,
+        "dni_verified":    True,
+        "dob_verified":    True,
+        "identity_method": "dni+dob",
+        "channel":         "id-claim",
+        "act":             {"sub": AGENT_CLIENT_ID},  # RFC 8693
+        "mobile_device_id": user["mobile_token"],
+    }
+
+    # Persistir
+    PENDING_CHALLENGES[challenge_id] = {
+        "user_id":            req.user_id,
+        "identity_assertion": identity_assertion,
+        "scope":              req.scope,
+        "iat":                iat,
+        "exp":                exp,
+        "approved":           False,
+        "biometric_used":     False,
+    }
+
+    # 3. Disparar push (en PoC: log; en producción, FCM/APNs)
+    push_endpoint = f"/agente/auth/identity/push/{challenge_id}"
+    logger.info(
+        "[C/Identity] Push enviado a device=%s challenge_id=%s",
+        user["mobile_token"], challenge_id,
+    )
+
+    return IdentityResponse(
+        challenge_id=challenge_id,
+        verification_uri=f"http://localhost:7000{push_endpoint}",
+        expires_in=120,
+        acr="id-claim+push-biometric",
+    )
+
+
+    # ─── Endpoint unificado: ejecutar la acción del agente ──────────────
 @app.post("/agente/call", response_model=CallResponse)
 async def agente_call(req: CallRequest) -> CallResponse:
     """
