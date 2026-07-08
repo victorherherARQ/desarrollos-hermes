@@ -380,7 +380,92 @@ async def auth_identity(req: IdentityRequest) -> IdentityResponse:
     )
 
 
-    # ─── Endpoint unificado: ejecutar la acción del agente ──────────────
+# ─── FLUJO C (IDENTIDAD): push mock (móvil aprueba) + polling ────────
+@app.post("/agente/auth/identity/push/{challenge_id}")
+async def auth_identity_push(challenge_id: str, biometric: bool = True) -> dict:
+    """
+    Endpoint mock que simula la app móvil del usuario.
+
+    En producción, el push llega vía FCM/APNs a la app móvil del usuario
+    y la app hace un callback a este endpoint cuando el humano aprueba
+    (con su biometría — fingerprint/Face ID).
+
+    Para la PoC: el desarrollador hace un curl/Postman a esta URL
+    para aprobar el challenge manualmente.
+    """
+    challenge = PENDING_CHALLENGES.get(challenge_id)
+    if challenge is None:
+        raise HTTPException(status_code=404, detail="challenge_id inválido")
+    challenge["approved"] = True
+    challenge["biometric_used"] = biometric
+    logger.info(
+        "[C/Identity] Push APROBADO challenge_id=%s user=%s biometric=%s",
+        challenge_id, challenge["user_id"], biometric,
+    )
+    return {"status": "approved", "challenge_id": challenge_id, "biometric": biometric}
+
+
+@app.post("/agente/auth/identity/poll", response_model=TokenResponse)
+async def auth_identity_poll(challenge_id: str, biometric_used: bool = True) -> TokenResponse:
+    """
+    Polling: el cliente pregunta si el push ya fue aprobado.
+
+    Si sí, firma la identity-assertion JWT, llama al IdP vía
+    oauth.identity_exchange, y devuelve el access_token. Limpia el challenge
+    del storage tras éxito.
+    """
+    challenge = PENDING_CHALLENGES.get(challenge_id)
+    if challenge is None:
+        raise HTTPException(status_code=404, detail="challenge_id inválido o expirado")
+
+    if int(time.time()) > challenge["exp"]:
+        PENDING_CHALLENGES.pop(challenge_id, None)
+        raise HTTPException(status_code=410, detail="Challenge expirado")
+
+    if not challenge["approved"]:
+        raise HTTPException(
+            status_code=425,
+            detail="Push pendiente de aprobación en el móvil del usuario",
+        )
+
+    challenge["biometric_used"] = biometric_used
+
+    # Firmar la identity-assertion JWT
+    identity_jwt = _sign_identity_assertion(challenge["identity_assertion"])
+
+    # Canjear contra el IdP (si falla conexión, devolvemos 502 claro)
+    try:
+        token = await oauth.identity_exchange(
+            identity_assertion=identity_jwt,
+            scope=challenge["scope"],
+        )
+    except httpx.HTTPStatusError as e:
+        logger.error("[C/Identity] IdP respondió %d: %s", e.response.status_code, e.response.text[:300])
+        raise HTTPException(
+            status_code=502,
+            detail=f"IdP rechazó la assertion: {e.response.text[:300]}",
+        )
+    except httpx.RequestError as e:
+        logger.error("[C/Identity] Error de red con IdP: %s", e)
+        raise HTTPException(
+            status_code=502,
+            detail=f"No se pudo conectar con el IdP: {type(e).__name__}",
+        )
+
+    # Limpiar challenge tras éxito
+    user_id = challenge["user_id"]
+    PENDING_CHALLENGES.pop(challenge_id, None)
+
+    logger.info("[C/Identity] access_token emitido para user=%s", user_id)
+    return TokenResponse(
+        access_token=token["access_token"],
+        expires_in=token["expires_in"],
+        token_type=token.get("token_type", "Bearer"),
+        scope=token.get("scope", challenge["scope"]),
+    )
+
+
+# ─── Endpoint unificado: ejecutar la acción del agente ──────────────
 @app.post("/agente/call", response_model=CallResponse)
 async def agente_call(req: CallRequest) -> CallResponse:
     """
