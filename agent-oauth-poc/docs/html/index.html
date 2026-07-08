@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A+B+C Flow Studio · agent-oauth-poc</title>
+  <link rel="stylesheet" href="./static/styles.css" />
+</head>
+<body data-theme="dark">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" class="logo" aria-hidden="true">
+        <path fill="currentColor" d="M12 1.5 3 5v6.4c0 4.5 3.2 8.6 9 11 5.8-2.4 9-6.5 9-11V5l-9-3.5z"/>
+      </svg>
+      <div>
+        <div class="title">A+B+C Flow Studio</div>
+        <div class="subtitle">agent-oauth-poc · v2 — secuencias interactivas de los 3 flujos</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" data-flow="A" role="tab" aria-selected="true">
+        <span class="tab-letter">A</span>
+        <span class="tab-name">Auth Code + PKCE</span>
+        <span class="tab-rfc">RFC 6749 §4.1 + RFC 7636</span>
+      </button>
+      <button class="tab" data-flow="B" role="tab" aria-selected="false">
+        <span class="tab-letter">B</span>
+        <span class="tab-name">Device Code</span>
+        <span class="tab-rfc">RFC 8628</span>
+      </button>
+      <button class="tab" data-flow="C" role="tab" aria-selected="false">
+        <span class="tab-letter">C</span>
+        <span class="tab-name">On-Behalf-Of</span>
+        <span class="tab-rfc">RFC 7523 / 8693</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-wrap">
+      <div class="canvas-header">
+        <div class="canvas-title" id="flowTitle">Flujo A — Authorization Code + PKCE</div>
+        <div class="canvas-meta" id="flowMeta">Cargando…</div>
+      </div>
+      <div class="svg-host" id="svgHost">
+        <svg id="sequence" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="controls-inner">
+        <div class="ctrl-group">
+          <button id="btnPlay" class="btn primary" title="Play">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <span>Play</span>
+          </button>
+          <button id="btnStep" class="btn" title="Siguiente paso">
+            <svg viewBox="0 0 24 24"><path d="M6 5l8 7-8 7V5zm10 0h2v14h-2z" fill="currentColor"/></svg>
+            <span>Step</span>
+          </button>
+          <button id="btnReset" class="btn" title="Reiniciar">
+            <svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            <span>Reset</span>
+          </button>
+        </div>
+        <div class="ctrl-group slider">
+          <label for="speed">Velocidad</label>
+          <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1" />
+          <span id="speedVal" class="mono">1.0×</span>
+        </div>
+        <div class="ctrl-group progress">
+          <div class="bar"><div id="barFill"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card now">
+        <div class="card-eyebrow">Paso <span id="stepIdx">0</span> / <span id="stepTotal">0</span></div>
+        <h2 id="stepTitle">—</h2>
+        <p id="stepDesc">Pulsa <strong>Play</strong> para iniciar la animación.</p>
+        <div class="step-tags" id="stepTags"></div>
+      </div>
+
+      <div class="card code">
+        <div class="code-tabs" id="codeTabs"></div>
+        <pre><code id="codeBlock">// Selecciona un flujo y pulsa Play.</code></pre>
+      </div>
+
+      <div class="card jwt" id="jwtCard" hidden>
+        <div class="card-eyebrow">Claims del JWT recibido</div>
+        <pre><code id="jwtBlock">—</code></pre>
+      </div>
+
+      <div class="card actors" id="actorsCard">
+        <div class="card-eyebrow">Actores del flujo</div>
+        <ul id="actorsList"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="./static/flows.js"></script>
+  <script type="module" src="./static/render.js"></script>
+  <script type="module" src="./static/app.js"></script>
+</body>
+</html>
