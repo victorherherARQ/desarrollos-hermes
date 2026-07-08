@@ -241,6 +241,57 @@ class OAuthClient:
             return resp.json()
 
     # ----------------------------------------------------------------- #
+    # FLUJO C (IDENTIDAD): JWT Bearer con identity-assertion           #
+    # ----------------------------------------------------------------- #
+    # El agente firma una identity-assertion JWT (con claims
+    # dni_verified=true, dob_verified=true) y la presenta al IdP
+    # junto con su client_secret. El IdP emite el access_token sin
+    # pedir password porque la assertion prueba que el agente ya
+    # verificó la identidad del humano.
+    #
+    # Diferencia con obo_exchange (que usa el access_token del humano):
+    # aquí NO hay access_token previo — el agente demuestra la identidad
+    # directamente con su firma + claims.
+    # ----------------------------------------------------------------- #
+    async def identity_exchange(
+        self,
+        identity_assertion: str,
+        scope: str,
+    ) -> dict[str, Any]:
+        """
+        Canjea una identity-assertion JWT por un access_token del IdP.
+
+        Args:
+            identity_assertion: JWT firmado por el agente con los claims
+                                dni_verified / dob_verified / identity_method.
+            scope: Scope OAuth pedido (p.ej. 'calendar.read').
+
+        Returns:
+            {access_token, expires_in, scope, token_type}
+
+        Raises:
+            httpx.HTTPStatusError si el IdP responde con >= 400.
+        """
+        logger.info("[C/Identity] canjeando identity_assertion scope=%s", scope)
+        data = {
+            "grant_type":    "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "client_id":     AGENT_CLIENT_ID,
+            "client_secret": AGENT_CLIENT_SECRET,
+            "assertion":     identity_assertion,
+            "scope":         scope,
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(IDP_TOKEN_ENDPOINT, data=data)
+            logger.debug(
+                "[C/Identity] POST %s -> HTTP %d",
+                IDP_TOKEN_ENDPOINT, resp.status_code,
+            )
+            if resp.status_code >= 400:
+                logger.error("[C/Identity] Error: %s", resp.text[:300])
+            resp.raise_for_status()
+            return resp.json()
+
+    # ----------------------------------------------------------------- #
     # FLUJO B: Device Code Flow (RFC 8628)                             #
     # ----------------------------------------------------------------- #
     # Para agentes headless: el agente imprime un código + URL, el humano
