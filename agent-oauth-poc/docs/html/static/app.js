@@ -171,10 +171,30 @@ function renderStep(flow, idx) {
     showCodeBlock(card, codeLangs[0]);
   }
 
-  // JWT
-  if (card.claims) {
-    $('#jwtCard').hidden = false;
-    $('#jwtBlock').textContent = JSON.stringify(card.claims, null, 2);
+  // JWT / token claims
+  if (card.tokenClaims && card.tokenClaims.length) {
+    renderClaimsTable(card);
+  } else if (card.claims && (typeof card.claims === 'object')) {
+    // Fallback: claims plano legacy (puede aparecer tras setFlow re-lectura)
+    const flattenClaims = (obj, prefix = '') => {
+      const out = [];
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        const claim = prefix ? prefix : k;
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          out.push(...flattenClaims(v, claim));
+        } else {
+          out.push({ claim, value: v, note: '' });
+        }
+      }
+      return out;
+    };
+    const flat = Array.isArray(card.claims) ? card.claims : flattenClaims(card.claims);
+    if (flat.length) {
+      renderClaimsTable({ ...card, tokenClaims: flat });
+    } else {
+      $('#jwtCard').hidden = true;
+    }
   } else {
     $('#jwtCard').hidden = true;
   }
@@ -185,6 +205,44 @@ function renderStep(flow, idx) {
   $$('#actorsList .actor-row').forEach((row) => {
     row.classList.toggle('active', focused.has(row.dataset.actor));
   });
+}
+
+function renderClaimsTable(card) {
+  $('#jwtCard').hidden = false;
+
+  // Determinar qué tipo de token es, mirando el step label
+  const label = (card.label || '').toLowerCase();
+  let tokenType = 'JWT';
+  let tokenRole = '';
+  if (label.includes('voice') && label.includes('assertion')) {
+    tokenType = 'voice-assertion JWT';
+    tokenRole = 'firmado por el agente (client_assertion en POST /token)';
+  } else if (label.includes('200 {access_token') || label.includes('access_token, refresh_token')) {
+    tokenType = 'access_token / id_token';
+    tokenRole = 'emitido por el IdP tras push + biometría';
+  }
+  $('#tokenMeta').innerHTML =
+    '<strong>' + escapeHtml(tokenType) + '</strong> &mdash; ' + escapeHtml(tokenRole);
+
+  const rows = card.tokenClaims.map((c) => {
+    const valueStr = typeof c.value === 'object'
+      ? JSON.stringify(c.value)
+      : String(c.value);
+    return (
+      '<tr>' +
+        '<td><code>' + escapeHtml(c.claim) + '</code></td>' +
+        '<td><code>' + escapeHtml(valueStr) + '</code></td>' +
+        '<td>' + escapeHtml(c.note || '') + '</td>' +
+      '</tr>'
+    );
+  }).join('');
+  $('#claimsTbody').innerHTML = rows;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[<>&"']/g, (c) => ({
+    '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'
+  })[c]);
 }
 
 function showCodeBlock(card, lang) {

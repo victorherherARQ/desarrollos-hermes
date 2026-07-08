@@ -361,6 +361,21 @@ else:
       from: 'agente', to: 'idp',
       kind: 'sync', label: 'POST /token  grant_type=password  +  x-voice-assertion',
       desc: 'El agente (cliente confidencial) pide un token al IdP SIN password de Ana. Demuestra identidad con su client_secret Y firma un JWT de "voice assertion" que dice: sub=ana, voice_verified=true, acr=phone-voice. El IdP debe tener un protocol mapper que acepte esta assertion.',
+      tokenClaims: [
+        { claim: 'iss',  value: 'agente-ia',                              note: 'Emisor: el agente IA. El IdP verifica su firma con la clave pública del cliente registrada en el realm.' },
+        { claim: 'sub',  value: 'f8a1d3e2-7b09-4a2e-9c11-ana',            note: 'Sujeto: ana (el humano) — el agente declara QUIÉN es el humano detrás de la llamada.' },
+        { claim: 'aud',  value: 'https://idp/realms/agent-poc',            note: 'Audience: el realm de Keycloak que debe aceptar esta assertion (defense against token confusion).' },
+        { claim: 'iat',  value: '1751990000',                              note: 'Issued at: UNIX ts de cuando se firmó la assertion.' },
+        { claim: 'exp',  value: '1751990120',                              note: 'Expires at: 2 min después. Corto porque la voz es efímera.' },
+        { claim: 'jti',  value: '5c9a1b3e-...',                           note: 'JWT ID único para prevenir replay (el IdP cachea jtis recientes).' },
+        { claim: 'acr',  value: 'phone-voice',                             note: 'Auth Context Class Ref: cómo se autenticó Ana. phone-voice = voiceprint sobre llamada activa.' },
+        { claim: 'auth_time', value: '1751990000',                         note: 'Cuándo se autenticó Ana (no cuándo se firmó la assertion — el agente puede firmar ms después).' },
+        { claim: 'voice_verified',      value: 'true',                     note: 'Custom claim del realm: Ana pasó la prueba de voiceprint.' },
+        { claim: 'voiceprint_score',    value: '0.94',                     note: 'Custom: score de similitud (cosine) sobre el enrollment. Umbral típico = 0.92.' },
+        { claim: 'caller_phone',        value: '+34 600 000 000',          note: 'Custom: nº origen PSTN/SIP. El IdP lo compara con la agenda del agente (outbound call) o el CRM.' },
+        { claim: 'channel',             value: 'voice',                    note: 'Custom: canal de entrada. Permite a la API rechazar requests que no vengan del canal autorizado.' },
+        { claim: 'act',  value: { sub: 'agente-ia' },                      note: 'RFC 8693 §4.2: el actor que ejecuta la acción. El humano (sub) actúa VÍA este agente.' },
+      ],
       code: { http:
 `POST /realms/agent-poc/protocol/openid-connect/token HTTP/1.1
 Content-Type: application/x-www-form-urlencoded
@@ -440,15 +455,14 @@ Content-Type: application/json
       from: 'idp', to: 'agente',
       kind: 'reply', label: '200 {access_token, refresh_token, id_token}',
       desc: 'El IdP valida la aprobación del móvil y emite el token DEFINITIVO. acr sube a "phone-voice+push-biometric" → cumple requisitos de SCA fuerte (PSD2) y NIST AAL2/AAL3.',
-      code: { json:
-`{
+      code: { json: `{
   "access_token":  "eyJ... <NUEVO>",
   "refresh_token": "eyJ... <NUEVO>",
   "id_token":      "eyJ... <NUEVO>",
   "expires_in":    300,
   "token_type":    "Bearer",
   "scope":         "openid email calendar.read"
-}`,
+}` },
       claims: {
         iss:        'http://keycloak:8080/realms/agent-poc',
         sub:        'f8a1d3e2-1b9c-4a8a-9e7f-...  (UUID de Ana)',
@@ -463,7 +477,25 @@ Content-Type: application/json
         act:        { sub: 'agente-ia' },             // RFC 8693: quién actúa
         voice_score: 0.94,                           // opcional
         caller_phone: '+34...0',                     // opcional
-      } },
+      },
+      tokenClaims: [
+        { claim: 'iss',         value: 'http://keycloak:8080/realms/agent-poc',         note: 'Emisor del access_token: el realm Keycloak que acaba de autenticar.' },
+        { claim: 'sub',         value: 'f8a1d3e2-...-ana',                            note: 'Sujeto humano: Ana. La API lo usa como user_id en queries.' },
+        { claim: 'aud',         value: ['agente-ia', 'spring-boot-api'],               note: 'Audience: ambos clientes pueden usar este token. Keycloak emite aud=array cuando el token sirve a múltiples ResourceServers.' },
+        { claim: 'azp',         value: 'agente-ia',                                    note: 'Authorized Party: cliente que PIDIÓ el token (vs sub que es el humano). Keycloak lo añade cuando aud != azp.' },
+        { claim: 'scope',       value: 'openid email calendar.read',                   note: 'OAuth2 scope heredado de la petición original.' },
+        { claim: 'iat',         value: 'now (1751990042)',                             note: 'Issued at: momento de emisión.' },
+        { claim: 'exp',         value: 'now + 300s',                                   note: 'Expires at: 5 min. Corto porque aún no se ha completado el flujo C en una API real con MFA fuerte.' },
+        { claim: 'auth_time',   value: 'now',                                          note: 'Cuándo Ana terminó de autenticarse (aceptó el push). Más reciente que iat si hubo retries.' },
+        { claim: 'acr',         value: 'phone-voice+push-biometric',                   note: 'Auth Context Class Ref: combinación voiceprint + push + biometría. Cumple NIST AAL3 / PSD2 SCA.' },
+        { claim: 'amr',         value: ['voice', 'push', 'faceid'],                    note: 'Auth Methods References: los 3 factores usados. voice=algo-que-eres, push=algo-que-tienes, faceid=algo-que-eres (vivo).' },
+        { claim: 'act',         value: { sub: 'agente-ia' },                           note: 'RFC 8693 §4.2: el agente actúa EN NOMBRE del humano. Sin este claim, sería Ana quien ejecuta la acción directamente.' },
+        { claim: 'session_state', value: '9f3a...',                                    note: 'Keycloak tracking de sesión activa (opcional).' },
+        { claim: 'voice_verified', value: 'true',                                      note: 'Custom (mapper): Ana pasó voiceprint. La API puede requerir este claim=true.' },
+        { claim: 'voiceprint_score', value: '0.94',                                    note: 'Custom (mapper): score del voiceprint. Para decisiones de fraude (ej. <0.85 rechaza).' },
+        { claim: 'original_channel', value: 'voice',                                  note: 'Custom (mapper): canal de entrada original. La API puede rechazar tokens cuyo canal no concuerda con la operación.' },
+        { claim: 'auth_chain',  value: ['voice', 'push', 'biometric'],                 note: 'Custom (mapper): trail de auditoría con cada paso del flujo voice-first → push → bio.' },
+      ],
       actor: 'idp',
     },
     {

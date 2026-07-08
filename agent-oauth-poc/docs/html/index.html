@@ -90,8 +90,17 @@
       </div>
 
       <div class="card jwt" id="jwtCard" hidden>
-        <div class="card-eyebrow">Claims del JWT recibido</div>
-        <pre><code id="jwtBlock">—</code></pre>
+        <div class="card-eyebrow">Claims del token emitido en este paso</div>
+        <div class="token-meta">
+          <span class="token-meta-k">Token:</span>
+          <span class="token-meta-v" id="tokenMeta">—</span>
+        </div>
+        <table class="claims-table">
+          <thead>
+            <tr><th>Claim</th><th>Valor</th><th>Nota</th></tr>
+          </thead>
+          <tbody id="claimsTbody"></tbody>
+        </table>
       </div>
 
       <div class="card actors" id="actorsCard">
