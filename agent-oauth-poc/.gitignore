@@ -1,0 +1,80 @@
+# ──────────────────────────────────────────────────────────────────────────
+# agent-oauth-poc — .gitignore
+# ──────────────────────────────────────────────────────────────────────────
+# IMPORTANTE: las credenciales (.env, secrets) NUNCA deben commitearse.
+# Este repo es público en GitHub.
+
+# ── Secrets & credentials ───────────────────────────────────────────────
+.env
+.env.*
+*.env
+**/secrets/
+**/*.pem
+**/*.key
+**/*.crt
+**/*.p12
+# client-mock puede tener keys de CIBA push
+client-mock/.env*
+
+# ── Build artifacts ────────────────────────────────────────────────────
+# Java/Maven (spring-boot-api)
+spring-boot-api/target/
+spring-boot-api/.mvn/wrapper/maven-wrapper.jar
+spring-boot-api/*.class
+spring-boot-api/*.jar
+spring-boot-api/*.war
+
+# Python (agent-python)
+agent-python/.venv/
+agent-python/venv/
+agent-python/__pycache__/
+agent-python/**/__pycache__/
+agent-python/*.pyc
+agent-python/*.pyo
+agent-python/.pytest_cache/
+agent-python/.mypy_cache/
+agent-python/.ruff_cache/
+agent-python/dist/
+agent-python/build/
+agent-python/*.egg-info/
+agent-python/.coverage
+agent-python/htmlcov/
+
+# Node (client-mock)
+client-mock/node_modules/
+client-mock/npm-debug.log*
+client-mock/yarn-debug.log*
+client-mock/yarn-error.log*
+client-mock/.npm
+client-mock/.next/
+client-mock/out/
+
+# ── Docker & runtime ───────────────────────────────────────────────────
+docker-compose.override.yml
+.probe
+*.log
+logs/
+.pid
+.session
+
+# ── IDE ────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Keycloak realm import legacy ───────────────────────────────────────
+# El JSON realm-agent-poc.json NO se commitea porque es legacy/inestable;
+# el repo usa scripts/create_realm.py como fuente única de verdad.
+keycloak/realm/realm-agent-poc.json
+
+# ── Templates ─────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.orig
+
+# ── OS ────────────────────────────────────────────────────────────────
+.DS_Store
+desktop.ini

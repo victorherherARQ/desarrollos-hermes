@@ -1,0 +1,118 @@
+name: agent-oauth-poc
+
+services:
+
+  # ──────────────────────────────────────────────────────────────
+  # PostgreSQL — backend de Keycloak
+  # ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-poc-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - agent-poc-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────────
+  # Keycloak 24 — IdP con CIBA habilitado
+  # ──────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: agent-poc-keycloak
+    command: ["start-dev"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      JAVA_TOOL_OPTIONS: "-Dkeycloak.profile.feature.ciba=enabled"
+    ports:
+      # 8180 externo (8080 está ocupado por structurizr-c4-viewer en el host)
+      - "8180:8080"
+    volumes:
+      - ./keycloak/realm:/opt/keycloak/data/import
+    networks:
+      - agent-poc-net
+
+  # ──────────────────────────────────────────────────────────────
+  # Spring Boot API — recurso protegido (Resource Server)
+  # ──────────────────────────────────────────────────────────────
+  spring-boot-api:
+    build:
+      context: ./spring-boot-api
+    container_name: agent-poc-spring-boot-api
+    ports:
+      - "9090:9090"
+    environment:
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/agent-poc
+    depends_on:
+      - keycloak
+    networks:
+      - agent-poc-net
+
+  # ──────────────────────────────────────────────────────────────
+  # Agent Python — cliente confidencial OIDC + CIBA requester
+  # ──────────────────────────────────────────────────────────────
+  agent-python:
+    build:
+      context: ./agent-python
+    container_name: agent-poc-agent-python
+    ports:
+      - "7000:7000"
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      REALM: agent-poc
+      AGENT_CLIENT_ID: agente-ia
+      AGENT_CLIENT_SECRET: secret-del-agente
+      API_BASE_URL: http://spring-boot-api:9090
+      CLIENT_MOCK_URL: http://client-mock:3000
+    depends_on:
+      - keycloak
+    networks:
+      - agent-poc-net
+
+  # ──────────────────────────────────────────────────────────────
+  # Client Mock — simula el cliente iniciador de la transacción CIBA
+  # ──────────────────────────────────────────────────────────────
+  client-mock:
+    build:
+      context: ./client-mock
+    container_name: agent-poc-client-mock
+    ports:
+      - "3000:3000"
+    environment:
+      AGENT_URL: http://agent-python:7000
+    depends_on:
+      - agent-python
+    networks:
+      - agent-poc-net
+
+# ────────────────────────────────────────────────────────────────
+# Redes
+# ────────────────────────────────────────────────────────────────
+networks:
+  agent-poc-net:
+    name: agent-poc-net
+    driver: bridge
+
+# ────────────────────────────────────────────────────────────────
+# Volúmenes
+# ────────────────────────────────────────────────────────────────
+volumes:
+  postgres-data:
+    name: agent-poc-postgres-data

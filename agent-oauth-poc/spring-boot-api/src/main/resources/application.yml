@@ -1,0 +1,39 @@
+server:
+  port: 9090
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: apigee-stub
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keycloak como IdP (realm agent-poc). Spring Boot descubre el
+          # endpoint JWKs automáticamente a partir del issuer-uri.
+          issuer-uri: http://keycloak:8080/realms/agent-poc
+
+# ──────────────────────────────────────────────────────────────
+# Actuator
+# ──────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
+# ──────────────────────────────────────────────────────────────
+# Logging
+# ──────────────────────────────────────────────────────────────
+logging:
+  level:
+    root: INFO
+    com.poc.api: DEBUG
+    org.springframework.security: INFO
+    org.springframework.boot.autoconfigure: WARN
