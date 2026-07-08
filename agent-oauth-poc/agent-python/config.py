@@ -78,24 +78,71 @@ CLIENT_MOCK_REDIRECT_URI = os.getenv(
 # (nombre, email para los emails que envíe el agente, etc.).
 # IMPORTANTE: ya NO contiene password — el humano nunca comparte su password
 # con el agente.
+#
+# Para el flujo C "identidad con datos identificativos" (en lugar de voz):
+# almacenamos DNI + fecha de nacimiento HASHEADOS (SHA-256). En producción
+# esto sería una llamada a un servicio de verificación de identidad real
+# (AEAT, SEP, Veriff, Onfido, etc.).
+import hashlib
+
+
+def _hash_identifier(value: str) -> str:
+    """SHA-256 hex digest. Normaliza a minúsculas y strip."""
+    return hashlib.sha256(value.lower().strip().encode("utf-8")).hexdigest()
+
+
 USERS = {
     "ana": {
         "name": "Ana García",
         "email": "ana@example.com",
         "preferred_username": "ana",
+        "dni_hash": _hash_identifier("12345678Z"),
+        "dob_hash": _hash_identifier("1990-05-15"),
+        "mobile_token": "device-ana-001",
     },
     "luis": {
         "name": "Luis Pérez",
         "email": "luis@example.com",
         "preferred_username": "luis",
+        "dni_hash": _hash_identifier("87654321X"),
+        "dob_hash": _hash_identifier("1985-03-22"),
+        "mobile_token": "device-luis-001",
     },
     "marta": {
         "name": "Marta López",
         "email": "marta@example.com",
         "preferred_username": "marta",
+        "dni_hash": _hash_identifier("11223344Y"),
+        "dob_hash": _hash_identifier("1992-11-30"),
+        "mobile_token": "device-marta-001",
     },
 }
 
 
 def get_user(user_id: str) -> dict | None:
     return USERS.get(user_id)
+
+
+def verify_identity(user_id: str, dni: str, dob: str) -> bool:
+    """
+    Verifica DNI + fecha de nacimiento contra la tabla interna (PoC).
+
+    Args:
+        user_id: ID del usuario registrado (ana, luis, marta).
+        dni:      DNI/NIF español (8 dígitos + letra).
+        dob:      Fecha de nacimiento ISO-8601 (YYYY-MM-DD).
+
+    Returns:
+        True si ambos datos coinciden con los registrados.
+        False si el usuario no existe o los datos no coinciden.
+
+    En producción: llamar a un servicio de verificación de identidad
+    (AEAT, SEP, Veriff). Aquí: comparación local de hashes.
+    """
+    user = USERS.get(user_id)
+    if user is None:
+        return False
+    return (
+        user["dni_hash"] == _hash_identifier(dni)
+        and user["dob_hash"] == _hash_identifier(dob)
+    )
