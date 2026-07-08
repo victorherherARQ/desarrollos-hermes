@@ -22,22 +22,26 @@
         <span class="tab-letter">A</span>
         <span class="tab-name">Auth Code + PKCE</span>
         <span class="tab-rfc">RFC 6749 §4.1 + RFC 7636</span>
+        <span class="tab-badge no-viable" title="No viable en este escenario">NO viable</span>
       </button>
       <button class="tab" data-flow="B" role="tab" aria-selected="false">
         <span class="tab-letter">B</span>
         <span class="tab-name">Device Code</span>
         <span class="tab-rfc">RFC 8628</span>
+        <span class="tab-badge no-viable" title="No viable en este escenario">NO viable</span>
       </button>
       <button class="tab" data-flow="C" role="tab" aria-selected="false">
         <span class="tab-letter">C</span>
-        <span class="tab-name">On-Behalf-Of</span>
-        <span class="tab-rfc">RFC 7523 / 8693</span>
+        <span class="tab-name">Voz + Push Step-Up</span>
+        <span class="tab-rfc">RFC 7521/7523 + 8693</span>
+        <span class="tab-badge viable" title="Viable en este escenario">Viable</span>
       </button>
     </nav>
   </header>
 
   <main class="layout">
     <section class="canvas-wrap">
+      <div class="viability-banner" id="viabilityBanner" hidden></div>
       <div class="canvas-header">
         <div class="canvas-title" id="flowTitle">Flujo A — Authorization Code + PKCE</div>
         <div class="canvas-meta" id="flowMeta">Cargando…</div>

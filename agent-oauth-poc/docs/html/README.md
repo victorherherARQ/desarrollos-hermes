@@ -1,10 +1,32 @@
 # A+B+C Flow Studio
 
-Diagrama de actores **dinámico e interactivo** (JavaScript puro, sin frameworks) de los 3 flujos OAuth/OIDC que implementa la PoC `agent-oauth-poc` en su versión v2:
+Diagrama de actores **dinámico e interactivo** (JavaScript puro, sin frameworks) de los 3 flujos OAuth/OIDC que implementa la PoC `agent-oauth-poc`:
 
-- **A** — Authorization Code + PKCE (RFC 6749 §4.1 + RFC 7636)
-- **B** — Device Code (RFC 8628)
-- **C** — On-Behalf-Of (RFC 7523)
+- **A** — Authorization Code + PKCE (RFC 6749 §4.1 + RFC 7636) — **NO VIABLE**
+- **B** — Device Code (RFC 8628) — **NO VIABLE**
+- **C** — Voice-Channel Identity + JWT Bearer Assertion + Push Step-Up (RFC 7521/7523 + RFC 8693) — **VIABLE** ✅
+
+## 🟢 Decisión de viabilidad (turno 2026-07-08)
+
+**Escenario real**: Ana está registrada en el IdP pero **no está logada**. Ana **no tiene token** porque llama por **teléfono** (no navega). El **agente IA la identifica por voz + número entrante + voiceprint**. Ana está **cerca de su móvil** (push + biometría como step-up).
+
+| Flujo | ¿Por qué no? | Resumen |
+|---|---|---|
+| **A** (Auth Code + PKCE) | ❌ NO viable | Requiere navegador interactivo. Ana está en llamada de voz, no tiene pantalla para login web + MFA. Forzar URL + login rompe la conversación. |
+| **B** (Device Code) | ❌ NO viable | Aunque Ana podría abrir URL y teclear `user_code` mientras habla, fricción alta (sacar móvil, abrir navegador, escribir código, aprobar). Pensado para TVs/CLIs/CI, no voicebots. |
+| **C** (Voz + Push) | ✅ Viable | Canal de voz para Ana (su canal natural). Solo un toque + biometría en el móvil (que ya tiene en la mano). Agente autenticado vía JWT firmado. **El único flujo que respeta el canal de entrada y la seguridad esperada**. |
+
+**C en detalle** (10 pasos animados):
+1. Ana marca al voicebot (PSTN/SIP/Teams).
+2. Agente IA la identifica (voz + nº + voiceprint contra enrollment).
+3. Agente **firma JWT assertion** con su `client_secret`: `sub=ana`, `acr=phone-voice`, `voiceprint_score=0.94`, `caller_phone=...`.
+4. IdP valida firma del agente + estado de Ana.
+5. **Push al móvil** de Ana: "¿Autorizas al agente a leer tu calendario?".
+6. **FaceID/huella + tap Approve** en el móvil.
+7. Móvil responde challenge firmado al IdP.
+8. IdP emite `access_token` con `sub=ana` + `act=agente-ia`.
+9. Agente llama a la API con Bearer token.
+10. API responde con los datos. Log AUDIT: `voice-verified + push-approved`.
 
 No es un fichero de texto ni una imagen estática: la **definición del flujo vive en JavaScript** y se anima paso a paso en SVG.
 

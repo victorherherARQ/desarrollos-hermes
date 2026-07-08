@@ -68,26 +68,28 @@ def main() -> int:
     render_inline = safe_for_inline(render_inline)
 
     # 4) Concatenar con un namespace compartido
-    bundled_js = f"""
-(function() {{
-  const M = {{}};
-{flows_inline}
-{render_inline}
-  // Envoltorio: exponer FLOWS + helpers
-  const M2 = {{
-    FLOWS,
-    renderFlow,
-    applyState,
-    getFlowActorIds,
-  }};
-  window.FLOWSTUDIO = M2;
-}})();
-{app_js.replace("import { FLOWS } from './flows.js';",
-                "const { FLOWS } = window.FLOWSTUDIO;")
-        .replace("import { renderFlow, applyState, getFlowActorIds } from './render.js';",
-                "const { renderFlow, applyState, getFlowActorIds } = window.FLOWSTUDIO;")}
-"""
-
+    # NOTA: usamos concatenación en vez de f-string porque los JS fuente
+    # contienen { y } que romperían el f-string (se interpretarían como
+    # placeholders de variables). La triple-comilla de f-string NO escapa
+    # automáticamente esos caracteres.
+    bundled_js = (
+        "(function() {\n"
+        "  const M = {};\n"
+        + flows_inline + "\n"
+        + render_inline + "\n"
+        "  const M2 = {\n"
+        "    FLOWS,\n"
+        "    renderFlow,\n"
+        "    applyState,\n"
+        "    getFlowActorIds,\n"
+        "  };\n"
+        "  window.FLOWSTUDIO = M2;\n"
+        "})();\n"
+        + app_js.replace("import { FLOWS } from './flows.js';",
+                         "const { FLOWS } = window.FLOWSTUDIO;")
+                .replace("import { renderFlow, applyState, getFlowActorIds } from './render.js';",
+                         "const { renderFlow, applyState, getFlowActorIds } = window.FLOWSTUDIO;")
+    )
     css_inline = minify_inline_css(css_raw)
 
     # 5) Reemplazar referencias en HTML:

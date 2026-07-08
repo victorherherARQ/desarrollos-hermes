@@ -1,5 +1,5 @@
 // ============================================================
-//  render.js — SVG sequence renderer
+//  render.js - SVG sequence renderer
 //  Dibuja actores + lifelines + mensajes animados.
 //  Expone renderFlow(container, flowSpec, currentIdx)
 // ============================================================

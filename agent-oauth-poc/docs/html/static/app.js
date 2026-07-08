@@ -1,5 +1,5 @@
 // ============================================================
-//  app.js — orquestador: estado, tabs, controles, panel lateral
+//  app.js - orquestador: estado, tabs, controles, panel lateral
 // ============================================================
 import { FLOWS } from './flows.js';
 import { renderFlow, applyState, getFlowActorIds } from './render.js';
@@ -47,6 +47,28 @@ function setFlow(id) {
   const flow = FLOWS[id];
   $('#flowTitle').textContent = flow.title;
   $('#flowMeta').textContent = flow.meta;
+
+  // Banner de viabilidad (visible solo si viable=false)
+  const banner = $('#viabilityBanner');
+  if (flow.viable === false && flow.nonViableReason) {
+    banner.hidden = false;
+    banner.className = 'viability-banner no-viable';
+    banner.innerHTML = `
+      <div class="vb-eyebrow">⛔ Flujo NO viable en el escenario actual</div>
+      <div class="vb-body">${flow.nonViableReason}</div>
+      <div class="vb-hint">Escenario actual: Ana registrada en el IdP, sin token, llamando por teléfono. Solo el <strong>Flujo C</strong> encaja con la realidad operacional.</div>
+    `;
+  } else if (flow.viable === true) {
+    banner.hidden = false;
+    banner.className = 'viability-banner viable';
+    banner.innerHTML = `
+      <div class="vb-eyebrow">✅ Flujo viable en el escenario actual</div>
+      <div class="vb-body">Ana está registrada en el IdP pero NO logada, llama por teléfono, y el agente IA la identifica por voz. El IdP exige step-up vía push al móvil cercano, donde Ana confirma con biometría.</div>
+      <div class="vb-hint">Cumple: RFC 7521/7523 (JWT Bearer) + RFC 8693 (act claim) + PSD2 SCA (push + biometría) + NIST AAL3.</div>
+    `;
+  } else {
+    banner.hidden = true;
+  }
 
   // Pasamos el ancho del svgHost como hint al renderer, porque en el primer
   // render del DOMContentLoaded el SVG todavía no tiene clientWidth propio.

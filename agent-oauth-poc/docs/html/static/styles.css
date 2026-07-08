@@ -113,6 +113,27 @@ html, body {
   border-left: 1px solid var(--border);
   margin-left: 2px;
 }
+.tab-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  margin-left: 2px;
+  white-space: nowrap;
+}
+.tab-badge.no-viable {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.tab-badge.viable {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.40);
+}
 
 /* ---------- Layout: canvas + side ---------- */
 .layout {
@@ -129,6 +150,44 @@ html, body {
   position: relative;
   overflow: hidden;
   min-width: 0;
+}
+
+/* ---------- Viability banner ---------- */
+.viability-banner {
+  margin: 12px 16px 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+.viability-banner.no-viable {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.30);
+}
+.viability-banner.viable {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.30);
+}
+.vb-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+.viability-banner.no-viable .vb-eyebrow { color: #fca5a5; }
+.viability-banner.viable    .vb-eyebrow { color: #6ee7b7; }
+.vb-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.vb-hint {
+  font-size: 11.5px;
+  color: var(--text-mute);
+  font-family: var(--mono);
+  margin-top: 4px;
 }
 .canvas-header {
   padding: 14px 20px 8px;
