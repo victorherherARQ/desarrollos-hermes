@@ -37,18 +37,45 @@ import time
 from typing import Any
 
 import httpx
+import jwt as pyjwt
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from config import (
     AGENT_CLIENT_ID,
+    AGENT_CLIENT_SECRET,
     API_BASE_URL,
     CLIENT_MOCK_REDIRECT_URI,
     IDP_ISSUER,
     USERS,
     get_user,
+    verify_identity,
 )
 from oauth_client import OAuthClient
+
+
+# ─── Storage en memoria para challenges de identidad (PoC — en prod: Redis)
+PENDING_CHALLENGES: dict[str, dict[str, Any]] = {}
+
+
+# ─── Helper: firmar identity-assertion JWT (HS256 con AGENT_CLIENT_SECRET)
+def _sign_identity_assertion(payload: dict[str, Any]) -> str:
+    """
+    Firma una identity-assertion JWT con HS256.
+
+    En PoC usamos HS256 (mismo secreto que el client). En producción sería
+    RS256 con la private_key del agente y la public_key registrada en el
+    IdP — o un client_assertion JWT firmado con la key del cliente.
+
+    Returns:
+        JWT en formato compacto (xxx.yyy.zzz).
+    """
+    return pyjwt.encode(
+        payload,
+        AGENT_CLIENT_SECRET,
+        algorithm="HS256",
+        headers={"typ": "JWT", "kid": AGENT_CLIENT_ID},
+    )
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
