@@ -2,9 +2,9 @@ name: agent-oauth-poc
 
 services:
 
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
   # PostgreSQL — backend de Keycloak
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: agent-poc-postgres
@@ -23,13 +23,15 @@ services:
       retries: 10
       start_period: 10s
 
-  # ──────────────────────────────────────────────────────────────
-  # Keycloak 24 — IdP con CIBA habilitado
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
+  # Keycloak 24 — IdP con flujos A (Auth Code + PKCE) y B (Device Code)
+  #               + soporte para C (OBO) cuando KC 26+
+  # CIBA desactivado tanto en el realm como en JAVA_TOOL_OPTIONS.
+  # ───────────────────────────────────────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
     container_name: agent-poc-keycloak
-    command: ["start-dev"]
+    command: ["start-dev", "--import-realm"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,18 +42,42 @@ services:
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      JAVA_TOOL_OPTIONS: "-Dkeycloak.profile.feature.ciba=enabled"
+      # CIBA desactivado a nivel de feature flag del servidor.
+      JAVA_TOOL_OPTIONS: "-Dkeycloak.profile.feature.ciba=disabled"
     ports:
       # 8180 externo (8080 está ocupado por structurizr-c4-viewer en el host)
       - "8180:8080"
     volumes:
-      - ./keycloak/realm:/opt/keycloak/data/import
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
     networks:
       - agent-poc-net
 
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
+  # realm-setup — idempotente: aplica el spec del realm (incluye
+  # atributos dotted, scopes, asigna scopes a clientes vía sub-endpoint).
+  # Solo se ejecuta una vez al hacer `docker compose up`; KC ya carga
+  # el JSON al arrancar, pero el script lo re-aplica por si se cambia
+  # el spec sin reiniciar KC.
+  # ───────────────────────────────────────────────────────────────
+  realm-setup:
+    build:
+      context: ./agent-python
+    container_name: agent-poc-realm-setup
+    command: ["python", "scripts/create_realm.py"]
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASS: admin
+    depends_on:
+      - keycloak
+    networks:
+      - agent-poc-net
+    restart: "no"
+    profiles: ["setup"]
+
+  # ───────────────────────────────────────────────────────────────
   # Spring Boot API — recurso protegido (Resource Server)
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
   spring-boot-api:
     build:
       context: ./spring-boot-api
@@ -65,9 +91,9 @@ services:
     networks:
       - agent-poc-net
 
-  # ──────────────────────────────────────────────────────────────
-  # Agent Python — cliente confidencial OIDC + CIBA requester
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
+  # Agent Python — cliente confidencial OIDC (flujos A + C + B)
+  # ───────────────────────────────────────────────────────────────
   agent-python:
     build:
       context: ./agent-python
@@ -75,20 +101,20 @@ services:
     ports:
       - "7000:7000"
     environment:
-      KEYCLOAK_URL: http://keycloak:8080
-      REALM: agent-poc
+      IDP_ISSUER: http://keycloak:8080/realms/agent-poc
       AGENT_CLIENT_ID: agente-ia
       AGENT_CLIENT_SECRET: secret-del-agente
       API_BASE_URL: http://spring-boot-api:9090
-      CLIENT_MOCK_URL: http://client-mock:3000
+      CLIENT_MOCK_REDIRECT_URI: http://client-mock:3000/auth/callback
+      LOG_LEVEL: INFO
     depends_on:
       - keycloak
     networks:
       - agent-poc-net
 
-  # ──────────────────────────────────────────────────────────────
-  # Client Mock — simula el cliente iniciador de la transacción CIBA
-  # ──────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────
+  # Client Mock — webapp Auth Code + PKCE (flujo A) + Device Code UI (B)
+  # ───────────────────────────────────────────────────────────────
   client-mock:
     build:
       context: ./client-mock
@@ -96,23 +122,26 @@ services:
     ports:
       - "3000:3000"
     environment:
+      IDP_ISSUER: http://keycloak:8080/realms/agent-poc
+      AGENT_CLIENT_ID: agente-ia
+      AGENT_CLIENT_SECRET: secret-del-agente
       AGENT_URL: http://agent-python:7000
     depends_on:
       - agent-python
     networks:
       - agent-poc-net
 
-# ────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────
 # Redes
-# ────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────
 networks:
   agent-poc-net:
     name: agent-poc-net
     driver: bridge
 
-# ────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────
 # Volúmenes
-# ────────────────────────────────────────────────────────────────
+# ───────────────────────────────────────────────────────────────
 volumes:
   postgres-data:
     name: agent-poc-postgres-data

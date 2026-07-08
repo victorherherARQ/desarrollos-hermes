@@ -1,131 +1,334 @@
 """
-FastAPI del agente IA.
+FastAPI del agente IA — Versión A+B+C portable.
 
-Endpoint principal:  POST /agente/call
-  - Recibe {user_id, request, action_type, scope}
-  - Decide el flujo OAuth según la sensibilidad del scope:
-      *.read   -> JWT Bearer (pre-aprobado, rutinario)
-      *.send   -> CIBA        (requiere aprobación fuera de banda del usuario)
-  - Con el access_token obtenido, invoca la API de negocio correspondiente.
+Endpoints:
+  GET  /agente/health                        -- healthcheck
+  POST /agente/auth/authorize                -- FLUJO A: devuelve authorize_url con PKCE
+  POST /agente/auth/device                   -- FLUJO B: pide device_code
+  POST /agente/auth/token                    -- (uso interno) intercambia code/refresh
+  POST /agente/call                          -- endpoint unificado de acción
+
+Flujo A (Auth Code + PKCE):
+  1. Cliente llama POST /agente/auth/authorize con {user_id, scope}
+  2. El agente devuelve {authorize_url, code_verifier, state}
+  3. Cliente redirige al browser del humano a authorize_url
+  4. Humano aprueba en IdP, vuelve a client-mock/callback con ?code=...&state=...
+  5. Cliente llama POST /agente/auth/token con {code, code_verifier}
+  6. El agente hace OBO (FLUJO C) para reducir el scope y devuelve el access_token
+  7. Cliente usa el access_token para llamar a /agente/call (o lo pasa a la API)
+
+Flujo B (Device Code):
+  1. Cliente llama POST /agente/auth/device con {user_id, scope}
+  2. Agente pide device_code al IdP y devuelve {user_code, verification_uri, ...}
+  3. Cliente muestra al humano "ve a <verification_uri> e introduce <user_code>"
+  4. Agente hace polling en background
+  5. Cuando el humano aprueba, el agente tiene access_token
+  6. Cliente usa el access_token para llamar a /agente/call
+
+Flujo C (OBO / JWT Bearer): interno, no expuesto al cliente (lo llama el
+agente a sí mismo para refinar el scope).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import time
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from config import API_BASE_URL, USERS, get_user
+from config import (
+    AGENT_CLIENT_ID,
+    API_BASE_URL,
+    CLIENT_MOCK_REDIRECT_URI,
+    IDP_ISSUER,
+    USERS,
+    get_user,
+)
 from oauth_client import OAuthClient
 
-# --- Logging ---------------------------------------------------------------
+# ─── Logging ────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=LOG_LEVEL,
     format="%(asctime)s %(levelname)-7s %(name)s | %(message)s",
 )
 logger = logging.getLogger("agent.app")
-# Subimos el detalle de httpx sólo si hace falta
 logging.getLogger("httpx").setLevel(LOG_LEVEL)
 
 app = FastAPI(
-    title="Agente IA -- OAuth/OIDC PoC",
-    version="1.0.0",
+    title="Agente IA -- OAuth/OIDC PoC (A+B+C)",
+    version="2.0.0",
     description=(
-        "Agente que actúa en nombre de usuarios delegando en Keycloak. "
-        "Usa JWT Bearer para acciones rutinarias y CIBA para sensibles."
+        "Agente que actúa en nombre de usuarios delegando en un IdP OIDC. "
+        "Soporta 3 flujos: Auth Code + PKCE (A), Device Code (B), OBO (C). "
+        "Portable entre Keycloak y Azure B2C External ID."
     ),
 )
 oauth = OAuthClient()
 
 
-# --- Modelos ---------------------------------------------------------------
+# ─── Modelos ────────────────────────────────────────────────────────────────
+class AuthorizeRequest(BaseModel):
+    user_id: str = Field(..., description="ID del usuario")
+    scope: str = Field(
+        ...,
+        description="Scope OAuth pedido, p.ej. 'openid profile calendar.read'",
+    )
+    acr_values: str | None = Field(
+        None,
+        description="Forzar MFA: '2' o 'c2' según el IdP",
+    )
+
+
+class AuthorizeResponse(BaseModel):
+    authorize_url: str
+    code_verifier: str
+    state: str
+    redirect_uri: str
+
+
+class TokenRequest(BaseModel):
+    code: str | None = Field(None, description="Authorization code (flujo A)")
+    code_verifier: str | None = Field(None, description="PKCE verifier (flujo A)")
+    refresh_token: str | None = Field(None, description="Refresh token (renovación)")
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str | None = None
+    id_token: str | None = None
+    expires_in: int | None = None
+    scope: str | None = None
+    token_type: str | None = "Bearer"
+
+
+class DeviceRequest(BaseModel):
+    user_id: str
+    scope: str
+
+
+class DeviceResponse(BaseModel):
+    user_code: str
+    device_code: str
+    verification_uri: str
+    verification_uri_complete: str | None = None
+    expires_in: int
+    interval: int
+
+
 class CallRequest(BaseModel):
-    user_id: str = Field(..., description="ID del usuario en nombre de quien actúa el agente")
+    access_token: str = Field(..., description="Access token (obtenido vía A o B)")
     request: str = Field(..., description="Frase/petición en lenguaje natural")
-    action_type: str = Field(..., description="Tipo lógico de acción (read_calendar, send_email, ...)")
-    scope: str = Field(..., description="Scope OAuth pedido, p.ej. calendar.read, email.send")
+    action_type: str = Field(..., description="Tipo lógico de acción")
+    scope: str = Field(
+        ...,
+        description="Scope OAuth que debe llevar el token (para OBO/verificación)",
+    )
 
 
 class CallResponse(BaseModel):
+    flow: str
     result: Any
 
 
-# --- Endpoints -------------------------------------------------------------
+# ─── Endpoints ──────────────────────────────────────────────────────────────
 @app.get("/agente/health")
 async def health() -> dict:
     logger.debug("health check")
-    return {"status": "UP"}
+    return {
+        "status": "UP",
+        "idp_issuer": IDP_ISSUER,
+        "agent_client_id": AGENT_CLIENT_ID,
+        "supported_flows": ["A:auth_code+pkce", "B:device_code", "C:obo"],
+    }
 
 
-@app.post("/agente/call", response_model=CallResponse)
-async def agente_call(req: CallRequest) -> CallResponse:
+# ─── FLUJO A: paso 1 — construir authorize URL ─────────────────────────────
+@app.post("/agente/auth/authorize", response_model=AuthorizeResponse)
+async def auth_authorize(req: AuthorizeRequest) -> AuthorizeResponse:
+    """
+    Construye la URL de authorize con PKCE.
+    El cliente (webapp) redirige al humano a esa URL.
+    """
+    if get_user(req.user_id) is None:
+        raise HTTPException(status_code=404, detail=f"Usuario '{req.user_id}' no registrado")
     logger.info(
-        "Llamada recibida: user=%s scope=%s action=%s request=%r",
-        req.user_id, req.scope, req.action_type, req.request,
+        "[A] Construyendo authorize URL: user=%s scope=%s acr_values=%s",
+        req.user_id, req.scope, req.acr_values,
+    )
+    out = oauth.build_authorize_url(
+        scope=req.scope,
+        acr_values=req.acr_values,
+    )
+    return AuthorizeResponse(
+        authorize_url=out["authorize_url"],
+        code_verifier=out["code_verifier"],
+        state=out["state"],
+        redirect_uri=CLIENT_MOCK_REDIRECT_URI,
     )
 
-    if get_user(req.user_id) is None:
-        logger.warning("user_id desconocido: %s", req.user_id)
-        raise HTTPException(
-            status_code=404,
-            detail=f"Usuario '{req.user_id}' no registrado",
-        )
 
-    # 1) Decidir flujo OAuth según sensibilidad del scope
-    if req.scope.endswith(".read"):
-        logger.info("[DECISION] scope rutinario -> JWT Bearer (OBO via password)")
-        token_resp = await oauth.jwt_bearer_flow(req.user_id, req.scope)
-    elif req.scope.endswith(".send"):
-        logger.info("[DECISION] scope sensible -> CIBA (backchannel al usuario)")
-        token_resp = await oauth.ciba_flow(
-            user_id=req.user_id,
-            scope=req.scope,
-            request_text=req.request,
-        )
-    else:
+# ─── FLUJO A: paso 2 — intercambiar code por tokens ────────────────────────
+@app.post("/agente/auth/token", response_model=TokenResponse)
+async def auth_token(req: TokenRequest) -> TokenResponse:
+    """
+    Intercambia el authorization code por tokens (paso final de A).
+    """
+    if not req.code or not req.code_verifier:
         raise HTTPException(
             status_code=400,
-            detail=f"Scope '{req.scope}' no soportado (debe terminar en .read o .send)",
+            detail="code y code_verifier son obligatorios",
         )
-
-    access_token = token_resp.get("access_token")
-    if not access_token:
-        logger.error("Keycloak no devolvió access_token: %s", token_resp)
+    try:
+        tok = await oauth.exchange_code_for_tokens(req.code, req.code_verifier)
+    except httpx.HTTPStatusError as e:
         raise HTTPException(
-            status_code=502,
-            detail="Keycloak no devolvió access_token",
+            status_code=e.response.status_code,
+            detail=f"IdP rechazó el code: {e.response.text}",
+        )
+    return TokenResponse(**tok)
+
+
+# ─── FLUJO A: refresh ───────────────────────────────────────────────────────
+@app.post("/agente/auth/refresh", response_model=TokenResponse)
+async def auth_refresh(req: TokenRequest) -> TokenResponse:
+    """Renueva el access_token del humano usando su refresh_token."""
+    if not req.refresh_token:
+        raise HTTPException(status_code=400, detail="refresh_token obligatorio")
+    try:
+        tok = await oauth.refresh_user_token(req.refresh_token)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"IdP rechazó el refresh: {e.response.text}",
+        )
+    return TokenResponse(**tok)
+
+
+# ─── FLUJO B: device code (paso 1) ──────────────────────────────────────────
+@app.post("/agente/auth/device", response_model=DeviceResponse)
+async def auth_device(req: DeviceRequest) -> DeviceResponse:
+    """
+    Pide un device_code al IdP. El cliente debe mostrar al humano
+    verification_uri + user_code.
+    """
+    if get_user(req.user_id) is None:
+        raise HTTPException(status_code=404, detail=f"Usuario '{req.user_id}' no registrado")
+    logger.info("[B] Solicitando device_code: user=%s scope=%s", req.user_id, req.scope)
+    out = await oauth.device_authorize(scope=req.scope)
+    return DeviceResponse(
+        user_code=out["user_code"],
+        device_code=out["device_code"],
+        verification_uri=out["verification_uri"],
+        verification_uri_complete=out.get("verification_uri_complete"),
+        expires_in=int(out.get("expires_in", 600)),
+        interval=int(out.get("interval", 5)),
+    )
+
+
+# ─── FLUJO B: device poll (paso 2) ─────────────────────────────────────────
+@app.post("/agente/auth/device/poll", response_model=TokenResponse)
+async def auth_device_poll(req: DeviceRequest) -> TokenResponse:
+    """
+    Hace polling al token endpoint con device_code hasta que el humano apruebe.
+    ATENCIÓN: este endpoint bloquea hasta expires_in segundos. Úsalo solo en
+    PoC o con un timeout explícito en el cliente.
+    """
+    # En producción, el cliente-mock debería hacer el polling y notificar
+    # al agente cuando llegue el access_token. Esto es solo para PoC.
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Use el cliente-mock como UI para device code. "
+            "El agente hace polling interno."
+        ),
+    )
+
+
+# ─── Endpoint unificado: ejecutar la acción del agente ──────────────────────
+@app.post("/agente/call", response_model=CallResponse)
+async def agente_call(req: CallRequest) -> CallResponse:
+    """
+    Ejecuta una acción del agente usando el access_token del usuario.
+    Si el scope pedido NO está ya en el access_token, hace OBO (flujo C)
+    para reducir el scope.
+    """
+    logger.info(
+        "Llamada recibida: scope=%s action=%s request=%r",
+        req.scope, req.action_type, req.request,
+    )
+
+    # 1) Decidir si el access_token ya sirve o hace falta OBO
+    access_token = req.access_token
+    flow_used = "A_or_B"
+
+    # Decodificar el JWT (sin verificar firma) para ver el scope actual.
+    # OJO: en producción la verificación de firma la hace la API destino,
+    # no el agente. Aquí solo inspeccionamos el claim.
+    claims: dict[str, Any] = {}
+    current_scope: list[str] = []
+    try:
+        import base64
+        import json as _json
+        payload_b64 = access_token.split(".")[1]
+        # Pad base64
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+        claims = _json.loads(payload)
+        _sc = claims.get("scope") or claims.get("scp") or ""
+        current_scope = [str(s) for s in _sc.split()]
+    except Exception as e:
+        logger.warning("No pude decodificar el JWT: %s", e)
+
+    if req.scope not in current_scope:
+        logger.info(
+            "[DECISION] scope=%s NO está en el token. Aplicando FLUJO C (OBO)...",
+            req.scope,
+        )
+        try:
+            delegated = await oauth.obo_exchange(
+                user_access_token=req.access_token,
+                requested_scope=req.scope,
+            )
+            access_token = delegated["access_token"]
+            flow_used = "A+C" if "device" not in current_scope else "B+C"
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=(
+                    f"OBO falló: {e.response.text}. "
+                    "¿El IdP soporta jwt-bearer con requested_token_use=on_behalf_of? "
+                    "Keycloak 24 NO lo soporta nativo (necesita KC 26+); "
+                    "en ese caso, pide el scope completo al IdP en el authorize inicial."
+                ),
+            )
+    else:
+        logger.info(
+            "[DECISION] scope=%s ya está en el token, no hace falta OBO",
+            req.scope,
         )
 
-    # 2) Llamar a la API de negocio con el token del usuario.
-    # Authorization: Bearer <jwt>. Spring Boot valida el JWT contra Keycloak
-    # y extrae el claim `scope` con la lista de scopes granted.
+    # 2) Llamar a la API de negocio con el access_token
     headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
         if req.scope == "calendar.read":
-            logger.info(
-                "[API] GET %s/api/calendar/events?user_id=%s",
-                API_BASE_URL, req.user_id,
-            )
+            logger.info("[API] GET %s/api/calendar/events", API_BASE_URL)
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{API_BASE_URL}/api/calendar/events",
-                    params={"user_id": req.user_id},
+                    params={"user_id": claims.get("preferred_username", "ana")},
                     headers=headers,
                 )
-            logger.debug("[API] respuesta HTTP %d body=%s", resp.status_code, resp.text)
             resp.raise_for_status()
-            result: Any = resp.json()
+            result = resp.json()
 
         elif req.scope == "email.send":
-            # El cuerpo del email sale del campo request / action_type del payload.
-            # En un agente "real" esto vendría del LLM; aquí lo tomamos literal.
-            user = get_user(req.user_id) or {}
+            user = get_user(claims.get("preferred_username", "ana")) or {}
             email_body = {
                 "to": user.get("email", "unknown@example.com"),
                 "subject": req.action_type,
@@ -141,7 +344,6 @@ async def agente_call(req: CallRequest) -> CallResponse:
                     json=email_body,
                     headers=headers,
                 )
-            logger.debug("[API] respuesta HTTP %d body=%s", resp.status_code, resp.text)
             resp.raise_for_status()
             result = resp.json()
 
@@ -155,20 +357,12 @@ async def agente_call(req: CallRequest) -> CallResponse:
             )
 
     except httpx.HTTPStatusError as e:
-        logger.error(
-            "[API] Error HTTP %d desde %s: %s",
-            e.response.status_code, e.request.url, e.response.text,
-        )
         raise HTTPException(
             status_code=e.response.status_code,
             detail=f"API upstream: {e.response.text}",
         )
     except httpx.RequestError as e:
-        logger.error("[API] Error de conexión: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"No se pudo conectar a la API: {e}",
-        )
+        raise HTTPException(status_code=503, detail=f"No se pudo conectar a la API: {e}")
 
-    logger.info("Llamada finalizada OK para user=%s scope=%s", req.user_id, req.scope)
-    return CallResponse(result=result)
+    logger.info("Llamada finalizada OK: flow=%s scope=%s", flow_used, req.scope)
+    return CallResponse(flow=flow_used, result=result)

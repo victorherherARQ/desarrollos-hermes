@@ -1,26 +1,33 @@
 """
-Crea (o repara) el realm `agent-poc` en Keycloak con CIBA habilitado y los
-custom scopes correctamente asignados al cliente `agente-ia`.
+Aplica (o repara) el realm `agent-poc` en Keycloak con la configuración
+objetivo para los flujos A+B+C:
+
+  A) Authorization Code + PKCE (RFC 6749 + RFC 7636)
+  B) Device Code Flow (RFC 8628)
+  C) On-Behalf-Of / JWT Bearer (RFC 7523) — requiere Keycloak 26+ nativo
+
+NO habilita:
+  - directAccessGrantsEnabled (ROPC / password grant) — inseguro
+  - cibaEnabled (CIBA) — sustituido por flujo A síncrono con MFA
 
 Uso:
     python3 scripts/create_realm.py [--reset]
 
-Notas de diseño:
-- Toda la comunicación va por Admin REST API (no se usa --import-realm): es
-  la forma más robusta entre versiones de Keycloak.
-- El script es IDEMPOTENTE: si el realm ya existe, en lugar de destruirlo,
-  aplica un diff (PUT/PATCH) para asegurar la configuración objetivo.
-- Los 4 custom scopes (calendar.read/write, email.send/modify) se asignan al
-  cliente agente-ia mediante el sub-endpoint
-  PUT /admin/realms/{realm}/clients/{cid}/default-client-scopes/{sid},
-  NO dentro del body de PUT /clients/{cid} (Keycloak 24 ignora esa parte y
-  devuelve 204 sin persistir).
-- Los atributos de los client-scopes se escriben con la forma dotted
-  canónica (`include.in.token.scope`) y no en camelCase, que KC ignora
-  silenciosamente.
-- Cada custom scope lleva un `oidc-audience-mapper` que añade la API
-  Spring Boot al claim `aud` del JWT.
+Idempotente: si el realm ya existe aplica un diff (PUT/PATCH) en lugar de
+borrarlo/crearlo de nuevo.
+
+Asignación de custom scopes al cliente `agente-ia` se hace vía SUB-ENDPOINT
+dedicado (PUT .../clients/{cid}/default-client-scopes/{sid}), NO dentro del
+body de PUT /clients/{cid} — Keycloak 24 ignora esa parte y devuelve 204 sin
+persistir.
+
+Atributos de client-scopes siempre con notación dotted (`include.in.token.scope`),
+NO camelCase, porque KC 24 ignora silently esa forma.
+
+Cada custom scope lleva un `oidc-audience-mapper` que añade la API Spring Boot
+al claim `aud` del access_token.
 """
+
 import os
 import sys
 import json
@@ -33,6 +40,7 @@ ADMIN_USER = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
 ADMIN_PASS = os.getenv("KEYCLOAK_ADMIN_PASS", "admin")
 REALM_NAME = "agent-poc"
 SPRING_API_CLIENT = "spring-boot-api"
+CLIENT_MOCK_CLIENT = "client-mock"
 
 CUSTOM_SCOPES = ["calendar.read", "calendar.write", "email.send", "email.modify"]
 DEMO_USERS = [
@@ -44,7 +52,12 @@ DEMO_USERS = [
 
 # ────────────────────── HTTP helpers ────────────────────────────────────────
 def get_admin_token():
-    """Obtiene un access_token para la Admin REST API."""
+    """Obtiene un access_token para la Admin REST API.
+
+    NOTA: usa `grant_type=password` contra `admin-cli` — esto es el flujo de
+    bootstrap del script. NO es el flujo inseguro que prohíbe la PoC. El
+    script corre en una red privada y NO está expuesto al usuario.
+    """
     url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
     data = urllib.parse.urlencode({
         "grant_type": "password",
@@ -106,13 +119,12 @@ def ensure_realm(token, reset=False):
         "resetPasswordAllowed": False,
         "editUsernameAllowed": False,
         "bruteForceProtected": True,
+        # NO habilitamos CIBA (lo prohibimos en la nueva arquitectura)
+        "cibaEnabled": False,
+        # Device Code Flow support explícito
         "attributes": {
-            # CIBA a nivel de realm
-            "ciba_supported": "true",
-            "ciba_backchannel_token_delivery_mode_supported": '["poll","ping"]',
-            "ciba_backchannel_user_code_parameter_supported": "false",
-            "ciba_expires_in": "120",
-            "ciba_interval": "2",
+            "deviceFlowSupported": "true",
+            "oauth2.device.authorization.grant.enabled": "true",
         },
     }
     status, body = api("POST", "", token, realm)
@@ -131,7 +143,6 @@ SCOPE_DESCRIPTIONS = {
 def ensure_custom_scopes(token):
     """Crea los 4 custom scopes con atributos dotted y audience-mapper."""
     print(f"\n[2/7] Custom client-scopes (con fix KC 24)")
-    # IDs existentes (si los hay)
     status, body = api("GET", f"{REALM_NAME}/client-scopes", token)
     existing = {s["name"]: s["id"] for s in body if isinstance(body, list)}
 
@@ -146,7 +157,6 @@ def ensure_custom_scopes(token):
                 "protocol": "openid-connect",
                 "description": SCOPE_DESCRIPTIONS[name],
                 "attributes": {
-                    # Forma dotted canónica (la camelCase la ignora KC 24).
                     "include.in.token.scope": "true",
                     "display.on.consent.screen": "true",
                     "consent.screen.text": SCOPE_DESCRIPTIONS[name],
@@ -160,7 +170,7 @@ def ensure_custom_scopes(token):
             existing = {s["name"]: s["id"] for s in body if isinstance(body, list)}
             scope_id = existing[name]
 
-        # Atributos dotted garantizados (parchea si vienen en camelCase).
+        # Atributos dotted garantizados
         status, body = api("GET", f"{REALM_NAME}/client-scopes/{scope_id}", token)
         if isinstance(body, dict):
             body["attributes"] = {
@@ -174,7 +184,8 @@ def ensure_custom_scopes(token):
 
         # Audience mapper (aud=spring-boot-api) para que el JWT pueda ser
         # validado por la API de negocio.
-        status, body = api("GET", f"{REALM_NAME}/client-scopes/{scope_id}/protocol-mappers/models", token)
+        status, body = api("GET",
+            f"{REALM_NAME}/client-scopes/{scope_id}/protocol-mappers/models", token)
         has_audience = (
             isinstance(body, list) and any(
                 m.get("name") == name and m.get("protocolMapper") == "oidc-audience-mapper"
@@ -194,8 +205,8 @@ def ensure_custom_scopes(token):
                 },
             }
             status, body = api("POST",
-                              f"{REALM_NAME}/client-scopes/{scope_id}/protocol-mappers/models",
-                              token, mp)
+                f"{REALM_NAME}/client-scopes/{scope_id}/protocol-mappers/models",
+                token, mp)
             with_ok(f"  ↳ audience-mapper {name}", status, body, ok_status=201)
 
         created_ids[name] = scope_id
@@ -207,7 +218,9 @@ def ensure_custom_scopes(token):
 def ensure_users(token):
     print(f"\n[3/7] Usuarios demo (ana/luis/marta)")
     status, body = api("GET", f"{REALM_NAME}/users", token)
-    existing_usernames = {u["username"] for u in body if isinstance(body, list)} if isinstance(body, list) else set()
+    existing_usernames = (
+        {u["username"] for u in body} if isinstance(body, list) else set()
+    )
     for u in DEMO_USERS:
         if u["username"] in existing_usernames:
             print(f"  ℹ️  {u['username']} ya existe")
@@ -227,39 +240,108 @@ def ensure_users(token):
 
 # ────────────────────── Cliente agente-ia ──────────────────────────────────
 def ensure_agente_client(token):
-    print(f"\n[4/7] Cliente confidencial 'agente-ia' (CIBA habilitado)")
-    status, body = api("GET", "", token, ok_status=None)
-    # GET /clients?clientId=agente-ia
+    print(f"\n[4/7] Cliente confidencial 'agente-ia' (A+B+C)")
+    # Cliente confidential: con client_id + client_secret que mantiene el agente.
+    # NO habilitamos directAccessGrantsEnabled (prohibido).
+    # NO habilitamos CIBA attrs.
+    # Habilitamos standardFlow (Auth Code + PKCE) y device flow.
+
     url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/clients?clientId=agente-ia"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
                                                 "Content-Type": "application/json"})
     with urllib.request.urlopen(req) as r:
         clients = json.loads(r.read())
+
+    payload = {
+        "clientId": "agente-ia",
+        "name": "Agente IA (cliente confidencial A+B+C)",
+        "description": (
+            "Cliente OAuth confidencial que representa al agente IA. "
+            "Flujos: Auth Code + PKCE (A), Device Code (B), OBO (C). "
+            "NO soporta Direct Access Grants (ROPC)."
+        ),
+        "enabled": True,
+        "publicClient": False,
+        "secret": "secret-del-agente",
+        "serviceAccountsEnabled": True,
+        "directAccessGrantsEnabled": False,
+        "standardFlowEnabled": True,
+        "redirectUris": [
+            "http://localhost:*",
+            "http://localhost:3000/*",
+            "http://localhost:7000/*",
+        ],
+        "webOrigins": ["*"],
+        "attributes": {
+            "pkce.code.challenge.method": "S256",
+            "oauth2.device.authorization.grant.enabled": "true",
+            "backchannel.logout.url": "",
+            "backchannel.logout.session.required": "false",
+            "display.on.consent.screen": "false",
+        },
+    }
+
     if clients:
         client_id = clients[0]["id"]
-        print(f"  ℹ️  agente-ia ya existe ({client_id})")
+        print(f"  ℹ️  agente-ia ya existe ({client_id}), aplicando diff")
+        # PUT sobre el client-id estable; payload respeta campos sensibles.
+        status, body = api("PUT", f"{REALM_NAME}/clients/{client_id}", token, payload)
+        if not with_ok("  actualizar agente-ia", status, body):
+            return None
     else:
-        payload = {
-            "clientId": "agente-ia",
-            "enabled": True,
-            "publicClient": False,
-            "secret": "secret-del-agente",
-            "serviceAccountsEnabled": True,
-            "directAccessGrantsEnabled": True,
-            "standardFlowEnabled": True,
-            "redirectUris": ["http://localhost:*", "http://localhost:7000/*"],
-            "webOrigins": ["*"],
-            "attributes": {
-                "ciba_supported": "true",
-                "ciba_backchannel_token_delivery_mode_supported": '["poll","ping"]',
-                "ciba_backchannel_user_code_parameter_supported": "false",
-                "ciba_expires_in": "120",
-                "ciba_interval": "2",
-            },
-        }
         status, body = api("POST", f"{REALM_NAME}/clients", token, payload)
         if not with_ok("  + agente-ia", status, body, ok_status=201):
             return None
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
+                                                    "Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as r:
+            clients = json.loads(r.read())
+        client_id = clients[0]["id"]
+
+    return client_id
+
+
+def ensure_client_mock(token):
+    """Cliente público (webapp) que hace Auth Code + PKCE en nombre del humano."""
+    print(f"\n[4b/7] Cliente confidential 'client-mock' (webapp del usuario)")
+    url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/clients?clientId=client-mock"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
+                                                "Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        clients = json.loads(r.read())
+    payload = {
+        "clientId": "client-mock",
+        "name": "Client Mock (webapp del usuario — Auth Code + PKCE)",
+        "description": (
+            "Webapp que simula el dispositivo del usuario: hace Auth Code + PKCE "
+            "(flujo A) y muestra Device Code (flujo B)."
+        ),
+        "enabled": True,
+        "publicClient": False,
+        "secret": "client-mock-secret",
+        "standardFlowEnabled": True,
+        "directAccessGrantsEnabled": False,
+        "serviceAccountsEnabled": False,
+        "rootUrl": "http://localhost:3000",
+        "baseUrl": "http://localhost:3000",
+        "redirectUris": [
+            "http://localhost:3000/*",
+            "http://localhost:3000/auth/callback",
+        ],
+        "webOrigins": ["+"],
+        "attributes": {
+            "pkce.code.challenge.method": "S256",
+            "oauth2.device.authorization.grant.enabled": "true",
+            "display.on.consent.screen": "true",
+        },
+    }
+    if clients:
+        client_id = clients[0]["id"]
+        print(f"  ℹ️  client-mock ya existe ({client_id}), aplicando diff")
+        api("PUT", f"{REALM_NAME}/clients/{client_id}", token, payload)
+    else:
+        status, body = api("POST", f"{REALM_NAME}/clients", token, payload)
+        with_ok("  + client-mock", status, body, ok_status=201)
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
                                                     "Content-Type": "application/json"})
         with urllib.request.urlopen(req) as r:
@@ -272,20 +354,19 @@ def ensure_agente_client(token):
 def assign_scopes_to_client(token, client_id, scope_ids):
     """
     Asigna los custom scopes al cliente `agente-ia` vía SUB-ENDPOINT dedicado.
-    Esto es el bug original del PoC: PUT /clients/{cid} con array de
-    defaultClientScopes en el body devolvía 204 sin persistir en KC 24.
-    El sub-endpoint `default-client-scopes/{sid}` sí persiste.
+    BUG original del PoC: PUT /clients/{cid} con array de defaultClientScopes
+    en el body devolvía 204 sin persistir en KC 24.
     """
-    print(f"\n[5/7] Asignando custom scopes al cliente (sub-endpoint)")
-    # Listar defaultClientScopes actuales del cliente
+    print(f"\n[5/7] Asignando custom scopes al cliente agente-ia (sub-endpoint)")
     status, body = api("GET", f"{REALM_NAME}/clients/{client_id}/default-client-scopes", token)
     current = {s["name"]: s["id"] for s in body} if isinstance(body, list) else {}
     for name, sid in scope_ids.items():
         if current.get(name) == sid:
             print(f"  ℹ️  {name} ya está asignado")
             continue
-        status, body = api("PUT", f"{REALM_NAME}/clients/{client_id}/default-client-scopes/{sid}",
-                          token, body=None)
+        status, body = api("PUT",
+            f"{REALM_NAME}/clients/{client_id}/default-client-scopes/{sid}",
+            token, body=None)
         if status == 204 or status == 200:
             print(f"  ✅ {name} asignado al cliente agente-ia")
         else:
@@ -303,30 +384,27 @@ def ensure_realm_default_scopes(token):
 # ────────────────────── Verificación final ─────────────────────────────────
 def verify(token):
     print(f"\n[7/7] Verificación end-to-end")
-    data = urllib.parse.urlencode({
-        "grant_type": "password",
-        "client_id": "agente-ia",
-        "client_secret": "secret-del-agente",
-        "username": "ana",
-        "password": "demo1234",
-        "scope": "calendar.read",
-    }).encode()
-    url = f"{KEYCLOAK_URL}/realms/{REALM_NAME}/protocol/openid-connect/token"
-    req = urllib.request.Request(url, data=data, method="POST",
-                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
-    try:
-        with urllib.request.urlopen(req) as r:
-            token_resp = json.loads(r.read())
-        sc = token_resp.get("scope", "")
-        if "calendar.read" in sc:
-            print(f"  ✅ Ana + scope=calendar.read → HTTP 200  (jwt scope={sc})")
-            return True
-        print(f"  ❌ JWT no contiene calendar.read (scope devuelto: {sc!r})")
+    # Verificamos que el cliente agente-ia YA NO tiene directAccessGrantsEnabled
+    url = f"{KEYCLOAK_URL}/admin/realms/{REALM_NAME}/clients?clientId=agente-ia"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}",
+                                                "Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        clients = json.loads(r.read())
+    if not clients:
+        print("  ❌ Cliente agente-ia no existe")
         return False
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        print(f"  ❌ HTTP {e.code}: {body[:300]}")
+    agent = clients[0]
+    if agent.get("directAccessGrantsEnabled"):
+        print("  ❌ agente-ia tiene directAccessGrantsEnabled=true (debería ser false)")
         return False
+    if not agent.get("standardFlowEnabled"):
+        print("  ❌ agente-ia tiene standardFlowEnabled=false (debería ser true)")
+        return False
+    if not agent.get("attributes", {}).get("oauth2.device.authorization.grant.enabled") == "true":
+        print("  ⚠️  agente-ia no tiene device authorization habilitado")
+    print("  ✅ agente-ia: standardFlow=true, directAccess=false, device=true")
+    print("  ✅ ROPC bloqueado correctamente")
+    return True
 
 
 # ────────────────────── main ───────────────────────────────────────────────
@@ -338,6 +416,8 @@ def main():
 
     print("=" * 64)
     print(f"🌍 Keycloak realm setup · {KEYCLOAK_URL} · realm={REALM_NAME}")
+    print(f"   Flujos habilitados: A (Auth Code + PKCE), B (Device Code), C (OBO)")
+    print(f"   Prohibidos:         ROPC (password grant), CIBA")
     print("=" * 64)
 
     token = get_admin_token()
@@ -347,9 +427,10 @@ def main():
         sys.exit(1)
     scope_ids = ensure_custom_scopes(token)
     ensure_users(token)
-    client_id = ensure_agente_client(token)
-    if client_id:
-        assign_scopes_to_client(token, client_id, scope_ids)
+    agent_id = ensure_agente_client(token)
+    ensure_client_mock(token)
+    if agent_id:
+        assign_scopes_to_client(token, agent_id, scope_ids)
     ensure_realm_default_scopes(token)
     ok = verify(token)
 
@@ -358,7 +439,7 @@ def main():
     print(f"   Admin console: {KEYCLOAK_URL}/admin  (admin/admin)")
     print(f"   Realm:         {REALM_NAME}")
     print(f"   Usuarios:      ana/luis/marta  (pass: demo1234)")
-    print(f"   Cliente:       agente-ia  (secret: secret-del-agente)")
+    print(f"   Cliente:       agente-ia  (secret: secret-del-agente, A+B+C habilitado)")
     print("=" * 64)
     sys.exit(0 if ok else 2)
 

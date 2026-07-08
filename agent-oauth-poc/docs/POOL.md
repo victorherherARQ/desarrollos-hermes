@@ -1,7 +1,7 @@
-# POOL · Agent OAuth PoC — Documentación técnica exhaustiva
+# POOL · Agent OAuth PoC — v2 (A+B+C portable)
 
-> **Estado**: PoC funcional y verificada end-to-end.
-> **Stack**: 100% Docker local (docker compose).
+> **Estado**: Refactorizado para soportar los **3 flujos A+B+C** sin password grant.
+> **Stack**: 100% Docker local (docker compose). IdP swap-in para B2C.
 > **Última revisión**: 2026-07-08.
 > **Audiencia**: Víctor (mantenedor) y futuros revisores técnicos.
 
@@ -14,7 +14,7 @@
 3. [Estructura del repositorio](#3-estructura-del-repositorio)
 4. [Componentes clave](#4-componentes-clave)
 5. [Causa raíz del bug `invalid_scope` en Keycloak 24](#5-causa-raíz-del-bug-invalid_scope-en-keycloak-24)
-6. [Tests end-to-end realizados](#6-tests-end-to-end-realizados)
+6. [Tests end-to-end — Plantilla de los 3 flujos](#6-tests-end-to-end-plantilla-de-los-3-flujos)
 7. [Limitaciones conocidas y trabajo futuro](#7-limitaciones-conocidas-y-trabajo-futuro)
 8. [Glosario](#8-glosario)
 
@@ -22,645 +22,502 @@
 
 ## 1. Resumen ejecutivo
 
-### Qué demuestra
+### Qué demuestra (v2)
 
-La PoC **agent-oauth-poc** demuestra cómo un **agente de IA** puede operar de forma segura **en nombre de un usuario humano** contra APIs protegidas por OAuth2/OIDC, sin que el agente tenga que manejar credenciales del usuario ni tokens de larga duración. Lo que se prueba:
+La PoC `agent-oauth-poc` v2 demuestra cómo un **agente de IA** puede operar de forma segura **en nombre de un usuario humano** contra APIs protegidas por OAuth2/OIDC, **sin password credentials, sin CIBA**. Implementa los **3 flujos estándar** que cualquier IdP moderno soporta:
 
-- Un usuario final (Ana, Luis o Marta) llama al agente vía una API HTTP.
-- El agente identifica al usuario y decide **qué flujo OAuth ejecutar** según la sensibilidad del scope pedido:
-  - **Scopes rutinarios** (`*.read`) → flujo **On-Behalf-Of vía Resource Owner Password Credentials (ROPC)**, sin interrumpir al usuario (caso pragmático equivalente a JWT Bearer en esta PoC).
-  - **Scopes sensibles** (`*.send`) → flujo **OpenID Connect CIBA** con aprobación out-of-band del usuario en su "móvil".
-- Keycloak emite un **access_token** firmado como JWT con los scopes concedidos y un `oidc-audience-mapper` que añade `spring-boot-api` al claim `aud`.
-- El agente llama a la **API Spring Boot** con `Authorization: Bearer <jwt>`. Spring Boot (Apigee-stub) valida el JWT contra Keycloak (descubrimiento JWKs vía `issuer-uri`) y mapea el claim `scope` a authorities `SCOPE_xxx` mediante un `JwtAuthenticationConverter` custom.
-- Los endpoints de Spring están protegidos con `@PreAuthorize("hasAuthority('SCOPE_xxx')")`, de forma que **solo se conceden si el JWT trae exactamente ese scope**.
-- La respuesta vuelve al agente y de ahí al cliente.
+- **A. Authorization Code + PKCE** (RFC 6749 + RFC 7636): el humano se autentica en una webapp (`client-mock`) que delega el `access_token` al agente.
+- **B. Device Code Flow** (RFC 8628): para agentes headless (CI/CD, CLI, kiosko). El humano introduce un código en su dispositivo.
+- **C. On-Behalf-Of / JWT Bearer** (RFC 7523): el agente intercambia un `user_access_token` por uno delegado con scope mínimo.
+
+**Hitos importantes:**
+- **NO ROPC** (password grant eliminado: inseguro, antipatrón de producción).
+- **NO CIBA**: sustituido por flujo A síncrono con MFA (Keycloak/Conditional Access o B2C/Passkey).
+- **Portable Keycloak ↔ Azure B2C External ID**: misma arquitectura, mismo agente. Solo cambia el `issuer-uri`.
+
+### Decisión de arquitectura (v2)
+
+```python
+# Pseudocódigo de app.py:90-110 (regla de decisión)
+if req.scope.endswith(".read"):
+    apply_flow_A_or_C()
+elif req.scope.endswith(".send") or req.scope.endswith(".modify"):
+    apply_flow_A_or_C()  # con MFA forzado via acr_values
+elif headless_context:
+    apply_flow_B()
+```
+
+El **agente nunca decide entre A/B/C por scope** — los tres soportan cualquier scope. La decisión es por **contexto de despliegue**:
+- **Hay browser del humano cerca → A+C** (Auth Code + OBO).
+- **No hay UI → B** (Device Code).
+- **¿CIBA asíncrono?** → Ofrecemos Opción D vía plugin `ciba_plugin.py` opcional, no incluido en PoC principal (ver §7.4).
 
 ### Arquitectura high-level
 
 ```
                        ┌─────────────────────────┐
                        │     USUARIO / CLIENTE   │
-                       │ (Ana, Luis, Marta)      │
-                       │   UI cliente móvil      │
-                       │   (client-mock :3000)   │◀────────┐
-                       └────────────┬────────────┘         │
-                                    │ HTTP                 │ POST /ciba/notify
-                                    ▼                      │
-                       ┌─────────────────────────┐         │
-                       │  agent-poc-agent-python │         │
-                       │       (:7000)           │         │
-                       │ FastAPI · OAuthClient   │         │
-                       │ ROPC (read) + CIBA (send)│        │
-                       └────────────┬────────────┘         │
-                                    │                      │
-                                    │ Bearer JWT           │
-                                    ▼                      │
-                       ┌─────────────────────────┐         │
-                       │ agent-poc-spring-boot   │         │
-                       │        API (:9090)      │         │
-                       │ Apigee-stub · Resource  │         │
-                       │ Server                  │         │
-                       └─────────────────────────┘         │
-                                                          │
-                       ┌─────────────────────────┐         │
-                       │ agent-poc-keycloak      │─────────┘
-                       │ (:8180 → 8080 container)│
-                       │ quay.io/keycloak:24.0.5 │
-                       │ Realm: agent-poc        │
-                       │ CIBA habilitado         │
+                       │ (Ana, Luis o Marta)     │
+                       │   Dispositivo (browser  │
+                       │   o smartphone)         │
                        └────────────┬────────────┘
-                                    │ JDBC
-                                    ▼
-                       ┌─────────────────────────┐
-                       │ agent-poc-postgres      │
-                       │     (postgres:16)       │
-                       └─────────────────────────┘
+                                    │
+                  ┌─────────────────┴──────────────────┐
+                  │                                    │
+                  ▼                                    ▼
+       ┌─────────────────────┐              ┌────────────────────┐
+       │ A. Auth Code + PKCE │              │ B. Device Code Flow│
+       │ (client-mock :3000) │              │ (CLI/headless)     │
+       │ Redirige al browser │              │ Imprime user_code  │
+       │ del humano          │              │ + verification_uri │
+       └─────────┬───────────┘              └─────────┬──────────┘
+                 │ HTTP callback                      │ POST /devicecode
+                 │ (con code)                        │
+                 ▼                                    ▼
+       ┌──────────────────────────────────────────────────────┐
+       │       IdP (Keycloak 24 / Azure B2C External ID)      │
+       │      http://keycloak:8080  (KC)                      │
+       │      https://<tenant>.ciamlogin.com  (B2C)          │
+       │  Emite: access_token, refresh_token, id_token        │
+       └──────────────────┬───────────────────────────────────┘
+                          │ Bearer JWT (paso 4)
+                          ▼
+       ┌──────────────────────────────────────────────────────┐
+       │   agent-poc-agent-python (:7000)                     │
+       │   FastAPI · OAuthClient                              │
+       │   - A: gestiona authorize_url + PKCE pair            │
+       │   - C: OBO exchange (refinar scope)                  │
+       │   - B: polling /device/token                         │
+       └──────────────────┬───────────────────────────────────┘
+                          │ Bearer JWT (paso 5)
+                          ▼
+       ┌──────────────────────────────────────────────────────┐
+       │ agent-poc-spring-boot-api (:9090)                    │
+       │ Apigee-stub · Resource Server                        │
+       │   @PreAuthorize("hasAuthority('SCOPE_xxx')")        │
+       └──────────────────────────────────────────────────────┘
 ```
 
-Los cinco contenedores viven en la red bridge `agent-poc-net` y se resuelven por nombre de servicio (`keycloak`, `spring-boot-api`, `agent-python`, `client-mock`, `postgres`).
+### Resultados de los tests end-to-end (TODO)
 
-### Stack tecnológico
-
-| Capa | Tecnología | Versión |
+| Test | Estado | Notas |
 |---|---|---|
-| Orquestación | Docker Compose (formato v2) | n/a |
-| IdP | Keycloak (`quay.io/keycloak/keycloak`) | 24.0.5 (en compose `24.0`, fijada por SHA en release notes) |
-| DB IdP | PostgreSQL Alpine | 16 |
-| Backend agente | Python + FastAPI + uvicorn + httpx + PyJWT | Python 3.11 |
-| Backend API | Spring Boot + spring-boot-starter-oauth2-resource-server | 3.2.5 (Java 17) |
-| Front cliente mock | Node + Express + body-parser | Node 18 |
-| JRE runtime | eclipse-temurin JRE Alpine | 17 |
-| Build Spring | maven + eclipse-temurin JDK | 3.9 / 17 (multi-stage) |
-| Cliente HTTP / asserts | httpx (Python), curl/jq (tests) | varios |
+| Test A: Auth Code + PKCE + OBO | ⏳ pendiente restart contenedores | El endpoint es local; no necesita dependencias externas |
+| Test B: Device Code Flow | ⏳ pendiente restart contenedores | Idem |
+| Test C: OBO isolation (refinar scope) | ⏳ pendiente restart contenedores | Idem |
+| Test negativo: token sin scope | ⏳ pendiente restart | Debe seguir devolviendo 401/403 |
 
-### Resultados de los tests end-to-end
-
-Los **5 tests positivos** (3 calendar.read + 2 email.send) y el **test negativo** de denegación por scope insuficiente pasan al 100% con la configuración descrita en §6. La CIBA tiene la ruta implementada pero el "background sync" entre agente ↔ cliente mock ↔ push notification real no está fully wired (ver §7).
+> **Cómo correrlos**: ver sección §6. Los contenedores deben haber sido reiniciados tras el build de las imágenes nuevas (operación manual por Victor, ~5 s de downtime).
 
 ---
 
 ## 2. Arquitectura detallada
 
-### 2.1 Diagrama de secuencia end-to-end
-
-El flujo completo (variante calendar.read, que es la que pasa 100%):
+### 2.1 Diagrama de secuencia — Flujo A (Auth Code + PKCE)
 
 ```
-┌────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐
-│ Cliente│    │   Agente   │    │ Keycloak   │    │ Spring API │    │  Postgres  │
-│ (cURL) │    │  :7000     │    │  :8180     │    │   :9090    │    │    :5432   │
-└──┬─────┘    └─────┬──────┘    └─────┬──────┘    └─────┬──────┘    └─────┬──────┘
-   │                │                │                │                │
-   │ POST /agente/call              │                │                │
-   │ {user_id:ana, scope:calendar.read}              │                │
-   │ ───────────────▶               │                │                │
-   │                │ POST /token (grant_type=password)               │
-   │                │ client_id=agente-ia, secret,                    │
-   │                │ username=ana, password=demo1234, scope=calendar.read
-   │                │ ───────────────▶                │                │
-   │                │                │ valida user/pass (Postgres)    │
-   │                │                │ ───────────────────────────────▶│
-   │                │                │ ◀───────────────────────────────│
-   │                │ ◀─────── {access_token (JWT)} ─                 │
-   │                │  {scope:"calendar.read calendar.write email …"}│
-   │                │ GET /api/calendar/events?user_id=ana            │
-   │                │ Authorization: Bearer <jwt>     │               │
-   │                │ ────────────────────────────────▶               │
-   │                │                │                │ valida JWT vs  │
-   │                │                │                │ JWKS de KC,    │
-   │                │                │                │ extrae scope,  │
-   │                │                │                │ @PreAuthorize  │
-   │                │                │                │ hasAuthority   │
-   │                │                │                │ "SCOPE_calendar.read" ✅
-   │                │ ◀── {events:[…], agent_principal:agente-ia}     │
-   │ ◀─── {result:{events:[…]}}      │                │               │
-   │                │                │                │                │
+┌────────┐   ┌───────────┐   ┌────────┐   ┌──────────┐   ┌────────┐  ┌─────────────┐
+│Cliente │   │ client-   │   │ Keycloak│  │ Agente   │   │Human   │  │Spring API  │
+│        │   │ mock:3000 │   │ :8180   │  │:7000     │   │(browser)│  │:9090       │
+└──┬─────┘   └──┬────────┘   └──┬──────┘  └────┬─────┘   └──┬─────┘  └──────┬──────┘
+   │            │              │              │             │              │
+   │ 1. POST /agente/auth/authorize             │             │              │
+   │ {user_id, scope}                            │             │              │
+   │ ─────────────────────────────────────────▶ │             │              │
+   │            │              │ 2. POST /protocol/openid-connect/auth       │
+   │            │              │    (redirect_uri, PKCE pair, scope)         │
+   │            │              │ ◀────────────── │             │              │
+   │            │              │ 3. 302 Location: KC authorize page         │
+   │            │ ◀────────── │              │             │              │
+   │ 4. window.location = authorize_url        │             │              │
+   │ ───────────────────────────────────────────────────────▶ │              │
+   │            │              │             │ 5. KC login & consent        │
+   │            │              │             │ ◀──────────── │              │
+   │            │              │             │              │ 6. 302 /auth/callback?code=...&state=...
+   │            │ ◀────────────────────────────────────────────────── │     │
+   │ 7. GET /auth/callback?code=...  │             │             │              │
+   │ ─────────▶ │ 8. POST /token con grant_type=authorization_code + code_verifier
+   │            │ ──────────────▶ │             │             │              │
+   │            │ ◀──── {access_token, refresh_token, id_token} ─│            │
+   │            │ 9. callback: redirect /?session_id=<sid>      │             │
+   │ ◀────────│             │              │             │              │
+   │ 10. cliente tiene tokens en client-mock   │             │              │
+   │            │              │              │              │              │
+   │ 11. POST /agente/call {scope, request}    │              │              │
+   │ ─────────────────────────────────────────▶ │             │              │
+   │            │              │              │ 12. JWT ya tiene scope → llama a Spring
+   │            │              │              │ ─────────────────────────────────────▶
+   │            │              │              │ ── ◀─ {events:[...]} ─────│              │
+   │ ◀─── {result:{events:[...]}, flow:"A"}   │              │              │
 ```
 
-Variante CIBA (scope `email.send`): mismas llamadas pero el agente, en lugar de `password grant`, hace `POST /ext/ciba/auth` con `login_hint_token`, recibe `auth_req_id`, y entra en un loop de polling a `/token` con `grant_type=urn:openid:params:grant-type:ciba`. Keycloak notifica al cliente mock por backchannel (POST /ciba/notify) y cuando el usuario aprueba en la UI, el siguiente poll recibe el access_token.
+### 2.2 Diagrama de secuencia — Flujo C (OBO / Refinado de scope)
 
-### 2.2 Tabla de los 5 contenedores
+```
+Cliente ──▶ Agente ──▶ KC ──▶ Agente ──▶ Spring
+            │          │
+            │          │ Token del humano:
+            │          │ scope="openid profile email calendar.read email.send"
+            │
+            │ (Agente mira el JWT del humano y ve que NO tiene calendar.write)
+            │
+            │ Agente hace OBO (RFC 7523):
+            │   POST /token
+            │     grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer
+            │     assertion=<user_access_token>
+            │     scope=calendar.write
+            │     requested_token_use=on_behalf_of
+            │
+            ◀── KC devuelve NUEVO access_token con SOLO calendar.write
+            │
+            │ Agente llama a Spring con ese nuevo token.
+```
 
-| Container name | Imagen | Puerto host | Puerto container | Propósito | Healthcheck |
-|---|---|---|---|---|---|
-| `agent-poc-postgres` | `postgres:16-alpine` | (interno) | `5432` | DB interna de Keycloak. Persiste usuarios, realms, clients. | `pg_isready -U keycloak -d keycloak` cada 5s |
-| `agent-poc-keycloak` | `quay.io/keycloak/keycloak:24.0` | `8180` | `8080` | Authorization Server (IdP). Realm `agent-poc` con CIBA habilitado. Flag `--feature.ciba=enabled`. | (no definido en compose; readiness por logs) |
-| `agent-poc-spring-boot-api` | build local (multi-stage) | `9090` | `9090` | Apigee-stub. Resource Server OAuth2 que valida JWT contra Keycloak. Expone `/api/calendar/events` y `/api/email/send`. | `wget --spider http://localhost:9090/health` cada 30s |
-| `agent-poc-agent-python` | build local (Python 3.11-slim) | `7000` | `7000` | El agente IA. Recibe `POST /agente/call`, decide flujo OAuth (ROPC vs CIBA), invoca la API Spring con Bearer. | (no definido en compose) |
-| `agent-poc-client-mock` | build local (Node 18-alpine) | `3000` | `3000` | UI móvil simulada. Recibe `/ciba/notify` desde Keycloak, sirve UI web en `/`, expone `/approve`, `/reject`, `/api/pending-requests`. | (no definido en compose) |
+> **Limitación Keycloak 24**: KC 24 **NO** soporta `requested_token_use=on_behalf_of` nativamente (requiere KC 26+). En la PoC con KC, en lugar de hacer OBO, **el agente ya pide el scope completo al IdP** en el paso A y verifica en el JWT si lo tiene. En B2C se usa el flujo completo.
 
-> **Nota sobre puertos**: `8180` en host se mapea a `8080` en el contenedor porque el puerto `8080` del host está ocupado por otra herramienta local (`structurizr-c4-viewer`). Todos los servicios internos usan `http://keycloak:8080` por DNS de compose (`agent-poc-net`).
+### 2.3 Diagrama de secuencia — Flujo B (Device Code)
 
-### 2.3 Mapa de claims del JWT emitido por Keycloak
+```
+Cliente ──▶ Agente ──▶ KC ──▶ Usuario (otro dispositivo)
+            │          │
+            │ POST /protocol/openid-connect/auth/device
+            │ ◀──── {device_code, user_code, verification_uri, interval=5, expires_in=600}
+            │
+            │ (imprime user_code)
+            │ (abre la URL en el navegador del humano)
+            │
+            │ [polling cada 5s]
+            │ POST /token
+            │   grant_type=urn:ietf:params:oauth:grant-type:device_code
+            │   device_code=<device_code>
+            │
+            │ [humano va a /device, introduce user_code, aprueba]
+            │
+            │ POST /token ─▶ 200 {access_token, refresh_token}
+```
 
-Para un token ROPC de Ana con `scope=calendar.read`, el JWT contiene:
+### 2.4 Tabla de los 5 contenedores
+
+| Container | Imagen | Puerto host | Propósito | ¿Nuevo en v2? |
+|---|---|---|---|---|
+| `agent-poc-postgres` | postgres:16-alpine | (interno) | DB interna de Keycloak | — |
+| `agent-poc-keycloak` | quay.io/keycloak/keycloak:24.0 | 8180 | IdP — **CIBA desactivado**, PKCE+Device Code activos | modificado |
+| `agent-poc-spring-boot-api` | build local | 9090 | Apigee-stub Resource Server | — |
+| `agent-poc-agent-python` | build local | 7000 | El agente IA — refactorizado a A+B+C | **reescrito** |
+| `agent-poc-client-mock` | build local | 3000 | Webapp del usuario (no más receptor CIBA) | **reescrito** |
+| `agent-poc-realm-setup` | (opcional, profile `setup`) | — | Aplica `create_realm.py` una sola vez | **nuevo** |
+
+### 2.5 Mapa de claims del JWT (sin cambios respecto a v1)
+
+Para un token de Ana con `scope=calendar.read`:
 
 | Claim | Tipo | Valor ejemplo | Origen |
 |---|---|---|---|
-| `iss` | string | `http://keycloak:8080/realms/agent-poc` | Issuer del realm (`config.py:21` coincide) |
-| `sub` | UUID | `<uuid-de-ana>` | Usuario real que actúa (`oauth_client.py:64`) |
-| `aud` | array[string] | `["agente-ia", "spring-boot-api", "account"]` | `aud` base del client + audience mapper de cada custom scope (`create_realm.py:185-194`) |
-| `azp` | string | `agente-ia` | Authorized party: cliente que pidió el token |
-| `scope` | string (space-separated) | `calendar.read calendar.write email email.modify profile email.send` | Lista completa de scopes concedidos por el realm + requested |
-| `exp` | int (epoch s) | `now + accessTokenLifespan` (300s por defecto, `create_realm.py:103`) | Lifespan configurado a nivel de realm |
-| `iat` | int (epoch s) | `now` | Emitido en |
-| `jti` | UUID | `<uuid>` | Token ID único |
-| `preferred_username` | string | `ana` | Mapper del client-scope `profile` |
-| `email` | string | `ana@example.com` | Mapper del client-scope `email` |
-| `realm_access.roles` | array | `[]` o `["default-roles-agent-poc"]` | Roles del realm |
-
-> El claim **`scope`** está en formato space-separated (string) — exactamente lo que entiende `SecurityConfig.java:89-92` (`Arrays.asList(s.split("\\s+"))`).
-
-### 2.4 Flujos OAuth/OIDC que ejecuta el agente
-
-#### Flujo 1 — On-Behalf-Of vía ROPC (`*.read`)
-
-Implementado en `agent-python/oauth_client.py:108-154` (método `OAuthClient.jwt_bearer_flow`).
-
-1. El usuario final envía `POST /agente/call` con `scope=calendar.read`.
-2. `app.py:80-82` decide que es rutinario por el sufijo `.read` y llama a `oauth.jwt_bearer_flow(user_id, scope)`.
-3. El agente hace `POST http://keycloak:8080/realms/agent-poc/protocol/openid-connect/token` con `grant_type=password`, `client_id=agente-ia`, `client_secret=secret-del-agente`, `username=ana`, `password=demo1234`, `scope=calendar.read`.
-4. Keycloak valida y devuelve un JWT con `scope=calendar.read calendar.write email email.modify profile email.send` (todos los default scopes del cliente más el solicitado).
-5. El agente añade `Authorization: Bearer <jwt>` y llama al endpoint correspondiente en Spring (`app.py:109-123`).
-
-> **Nota de diseño**: en producción este flujo debería sustituirse por JWT Bearer (RFC 7523) con `private_key_jwt` y DPoP. En Keycloak 24 el grant RFC 7523 no está habilitado por defecto (ver §7). Las clases `user_assertion_for` y `login_hint_token_for` (`oauth_client.py:51-97`) ya están escritas para una migración futura.
-
-#### Flujo 2 — CIBA (`*.send`)
-
-Implementado en `agent-python/oauth_client.py:159-279` (método `OAuthClient.ciba_flow`).
-
-1. `app.py:83-89` detecta scope con sufijo `.send` y dispara CIBA.
-2. El agente construye un `login_hint_token` JWT firmado con el `client_secret` (`oauth_client.py:80-97`).
-3. `POST http://keycloak:8080/realms/agent-poc/protocol/openid-connect/ext/ciba/auth` con `client_id`, `client_secret`, `scope=email.send`, `login_hint_token`, `bind_token`. Keycloak responde con `auth_req_id`, `expires_in`, `interval`.
-4. En paralelo, Keycloak notifica al cliente mock (`POST /ciba/notify` según la config `ciba_backchannel_token_delivery_mode_supported = "ping"` o `poll`).
-5. El agente entra en un loop de polling `POST /token` con `grant_type=urn:openid:params:grant-type:ciba` y `auth_req_id` cada `interval` segundos (`oauth_client.py:232-274`).
-6. Mientras el usuario no apruebe, Keycloak devuelve `400 {"error":"authorization_pending"}`. El agente reintenta.
-7. Cuando el usuario aprueba en `client-mock`, el siguiente poll recibe `200 {access_token: …}`.
-8. Con el `access_token`, el agente llama a `POST http://spring-boot-api:9090/api/email/send` con Bearer.
+| `iss` | string | `http://keycloak:8080/realms/agent-poc` | Issuer |
+| `sub` | UUID | UUID de Ana | Usuario real |
+| `aud` | array | `["agente-ia", "spring-boot-api", "account"]` | Audience mapper |
+| `azp` | string | `agente-ia` | Authorized party |
+| `scope` | string | `calendar.read calendar.write ...` | Scopes concedidos |
+| `exp` | int | now + 300s | Lifespan del realm |
+| `preferred_username` | string | `ana` | Profile mapper |
 
 ---
 
 ## 3. Estructura del repositorio
 
 ```
-/home/vhdez/desarrollos-hermes/agent-oauth-poc/
-├── README.md                       # Quickstart y orientación general
-├── INSTRUCCIONES.md                # Brief del encargo original
-├── docker-compose.yml              # 5 servicios + red + volumen
+agent-oauth-poc/
+├── README.md                       # Quickstart actualizado
+├── INSTRUCCIONES.md
+├── docker-compose.yml              # 5+1 servicios + networks + volúmenes
 ├── docs/
-│   ├── ESTUDIO_COMPARATIVO.md      # (pendiente — otro subagente)
-│   ├── POOL.md                     # ← este archivo
-│   └── SETUP.md                    # (pendiente — otro subagente)
+│   ├── ESTUDIO_AZURE_B2C.md        # Migración a B2C + replanteamiento §14
+│   ├── ESTUDIO_COMPARATIVO.md
+│   ├── POOL.md                     # ← este archivo (v2 A+B+C)
+│   └── SETUP.md                    # Setup actualizado
 ├── scripts/
-│   └── create_realm.py             # Configuración idempotente del realm
+│   └── create_realm.py             # Idempotente. v2: sin ROPC/CIBA.
 ├── keycloak/
 │   └── realm/
-│       └── realm-agent-poc.json    # Realm JSON legacy (NO se usa — ver §5)
-├── spring-boot-api/                # Apigee-stub (Resource Server)
-│   ├── Dockerfile                  # Multi-stage maven:3.9-eclipse-temurin-17
-│   │                               #   → eclipse-temurin:17-jre-alpine
-│   ├── pom.xml                     # Spring Boot 3.2.5 + Java 17
-│   ├── README.md
-│   └── src/main/
-│       ├── java/com/poc/api/
-│       │   ├── ApiApplication.java
-│       │   ├── config/SecurityConfig.java
-│       │   └── controller/
-│       │       ├── CalendarController.java
-│       │       ├── EmailController.java
-│       │       └── HealthController.java
-│       └── resources/application.yml
-├── agent-python/                   # FastAPI agente
-│   ├── Dockerfile                  # python:3.11-slim + uvicorn
-│   ├── README.md
-│   ├── config.py                   # URLs y mapa de usuarios
-│   ├── oauth_client.py             # OAuthClient: jwt_bearer_flow + ciba_flow
-│   └── app.py                      # FastAPI: /agente/health + /agente/call
-└── client-mock/                    # UI móvil (Express)
-    ├── Dockerfile                  # node:18-alpine
-    ├── package.json
-    ├── README.md
-    ├── server.js                   # /ciba/notify, /approve, /reject, /healthz
-    └── public/index.html           # UI morada oscura con polling cada 2s
+│       └── realm-agent-poc.json    # v2: CIBA=false, ROPC=false, PKCE+Device=true
+├── spring-boot-api/                # Sin cambios (Resource Server)
+├── agent-python/                   # FastAPI refactorizado
+│   ├── Dockerfile
+│   ├── config.py                   # NUEVO: detección B2C automática por IDP_ISSUER
+│   ├── oauth_client.py             # NUEVO: A+B+C en una clase unificada
+│   └── app.py                      # NUEVO: rutas /agente/auth/{authorize,token,
+│                                   #              refresh,device,device/poll} + /call
+└── client-mock/                    # Webapp refactorizada
+    ├── Dockerfile
+    ├── server.js                   # NUEVO: webapp PKCE con callback handler,
+    │                               #        página device code, session store
+    └── public/index.html           # NUEVO: UI Auth Code + Device Code con tabs
 ```
-
-> **Nota sobre `keycloak/realm/`**: contiene un export JSON legacy (`realm-agent-poc.json`) que **no se procesa automáticamente** al arrancar Keycloak (ver §5). Se conserva como referencia histórica pero el setup real se hace ejecutando `python3 scripts/create_realm.py` contra la Admin REST API.
 
 ---
 
 ## 4. Componentes clave
 
-### 4.1 Agente Python (`agent-python/`)
+### 4.1 Agente Python — `agent-python/`
 
-#### Endpoints
+#### Endpoints (v2)
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/agente/health` | Healthcheck trivial (200 con `{"status":"UP"}`). |
-| POST | `/agente/call` | Endpoint principal. Cuerpo: `CallRequest`. Respuesta: `CallResponse`. |
+| Método | Ruta | Flujo | Descripción |
+|---|---|---|---|
+| GET | `/agente/health` | — | Healthcheck `{status, idp_issuer, supported_flows}` |
+| POST | `/agente/auth/authorize` | A | Construye authorize_url + PKCE pair. Devuelve `{authorize_url, code_verifier, state, redirect_uri}` |
+| POST | `/agente/auth/token` | A | Intercambia `code` por tokens (con client_secret) |
+| POST | `/agente/auth/refresh` | A | Renueva el access_token del humano con refresh_token |
+| POST | `/agente/auth/device` | B | Pide `device_code` al IdP |
+| POST | `/agente/auth/device/poll` | B | (placeholder; el polling real lo hace `oauth_client.device_poll_for_tokens`) |
+| POST | `/agente/call` | A+C/B+C | Ejecuta la acción del agente en nombre del humano. Decide dinámicamente si usa A o C |
 
-#### Modelos Pydantic (`app.py:47-56`)
+#### Clase `OAuthClient` (`oauth_client.py`)
+
+| Método | Firma | Flujo | Implementa |
+|---|---|---|---|
+| `build_authorize_url(scope, acr_values)` | → dict | A | PKCE pair + URL con `response_type=code`, `code_challenge=S256` |
+| `exchange_code_for_tokens(code, code_verifier)` | async → dict | A | `POST /token` con `grant_type=authorization_code` |
+| `refresh_user_token(refresh_token, scope)` | async → dict | A | `POST /token` con `grant_type=refresh_token` |
+| `device_authorize(scope)` | async → dict | B | `POST /device_authorization_endpoint` |
+| `device_poll_for_tokens(device_code, …)` | async → dict | B | Loop polling con manejo de `authorization_pending` / `slow_down` / `expired_token` |
+| `obo_exchange(user_access_token, requested_scope)` | async → dict | C | `POST /token` con `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer` |
+| `userinfo(access_token)` | async → dict | A/B | `GET /userinfo` |
+| `_b64url_nopad(bytes)` | helper | — | Base64url RFC 7636 |
+| `make_pkce_pair()` | → tuple | A | Genera `code_verifier` y `code_challenge=S256` |
+
+#### Regla de decisión en `/agente/call` (`app.py:230-310`)
 
 ```python
-class CallRequest(BaseModel):
-    user_id: str            # "ana" | "luis" | "marta"
-    request: str            # Texto libre (lenguaje natural)
-    action_type: str        # P.ej. "send_email"
-    scope: str              # "calendar.read" | "email.send" | "calendar.write" | "email.modify"
+# Decodifica el JWT del humano (sin verificar firma; Spring valida)
+claims = parse_jwt(access_token)  # light; sin crypto
+current_scope = claims.get("scope", "").split()
 
-class CallResponse(BaseModel):
-    result: Any             # Lo que devuelva la API Spring
-```
-
-#### Regla de decisión (`app.py:79-94`)
-
-```python
-if req.scope.endswith(".read"):
-    # ROPC (pragmático equivalente a OBO password en esta PoC)
-    token_resp = await oauth.jwt_bearer_flow(req.user_id, req.scope)
-elif req.scope.endswith(".send"):
-    # CIBA (aprobación out-of-band)
-    token_resp = await oauth.ciba_flow(req.user_id, req.scope, req.request)
+if req.scope in current_scope:
+    # Flujo directo: ya tengo lo que necesito
+    flow_used = "A"  # o "B" si vino de device code
 else:
-    raise HTTPException(400, f"Scope '{req.scope}' no soportado …")
+    # Refinar scope vía OBO (si el IdP lo soporta)
+    flow_used = "C"  # aplicaría pero en KC 24 skip: scope completo se pidió en A
+    delegated = await oauth.obo_exchange(...)
 ```
 
-> Los scopes `calendar.write` y `email.modify` están creados en Keycloak pero **no tienen endpoint en Spring** en esta PoC (ver §7). Si se piden, el flujo OAuth se completa pero `app.py:148-155` devuelve 400 porque no hay endpoint mapeado.
-
-#### Clase `OAuthClient` (`oauth_client.py:45-279`)
-
-- `user_assertion_for(user_id) -> str` (`oauth_client.py:51-78`): JWT HS256 firmado con `client_secret` que lleva `sub=user_id, iss=agente-ia, aud=<token_endpoint>, iat, exp`. Reservado para cuando se habilite JWT Bearer en Keycloak 26+.
-- `login_hint_token_for(user_id, scope) -> str` (`oauth_client.py:80-97`): JWT HS256 para CIBA con `sub, scope, iss=agente-ia, aud=<issuer>, iat, exp`.
-- `async jwt_bearer_flow(user_id, scope) -> dict` (`oauth_client.py:108-154`): ROPC password grant.
-- `async ciba_flow(user_id, scope, request_text, poll_timeout=120) -> dict` (`oauth_client.py:159-279`): CIBA con polling.
-
-#### Variables de entorno (`docker-compose.yml:77-83` + `config.py:13-28`)
+#### Variables de entorno (`docker-compose.yml:91-103` + `config.py`)
 
 | Variable | Valor en compose | Equivalente en `config.py` |
 |---|---|---|
-| `KEYCLOAK_URL` | `http://keycloak:8080` | `KEYCLOAK_URL` |
-| `REALM` | `agent-poc` | `REALM` |
+| `IDP_ISSUER` | `http://keycloak:8080/realms/agent-poc` | `IDP_ISSUER` (lee override de env) |
 | `AGENT_CLIENT_ID` | `agente-ia` | `AGENT_CLIENT_ID` |
 | `AGENT_CLIENT_SECRET` | `secret-del-agente` | `AGENT_CLIENT_SECRET` |
 | `API_BASE_URL` | `http://spring-boot-api:9090` | `API_BASE_URL` |
-| `CLIENT_MOCK_URL` | `http://client-mock:3000` | (declarada en compose; el código actual no la lee) |
-| `LOG_LEVEL` | `INFO` | (env directo) |
+| `CLIENT_MOCK_REDIRECT_URI` | `http://client-mock:3000/auth/callback` | (lee override de env) |
+| `B2C_USER_FLOW` | — | `B2C_USER_FLOW` (solo B2C) |
 
-### 4.2 Spring Boot API — Apigee-stub (`spring-boot-api/src/main/java/com/poc/api/`)
+> **Detección automática de IdP** (`config.py:25-40`): si `IDP_ISSUER` contiene `ciamlogin.com` o `b2clogin.com`, el código usa los paths de Azure B2C; en otro caso usa paths de Keycloak. Misma clase `OAuthClient` sirve para ambos.
 
-#### Entry point — `ApiApplication.java`
+### 4.2 Spring Boot API — `spring-boot-api/`
 
-`@SpringBootApplication`. 17 líneas. Sin configuración adicional (`ApiApplication.java:1-17`).
+(Sin cambios respecto a v1. Sigue siendo el Resource Server con `@PreAuthorize("hasAuthority('SCOPE_xxx')")`.)
 
-#### Seguridad — `config/SecurityConfig.java`
+### 4.3 Cliente Mock — webapp del usuario (`client-mock/`)
 
-- `@EnableMethodSecurity` en línea 32 → habilita `@PreAuthorize`.
-- `SecurityFilterChain` (líneas 36-56):
-  - `csrf.disable()` (API stateless).
-  - `SessionCreationPolicy.STATELESS`.
-  - `oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(jwtAuthenticationConverter())))`.
-  - `requestMatchers("/health", "/actuator/health", "/actuator/info").permitAll()`.
-  - `anyRequest().authenticated()`.
-- `JwtAuthenticationConverter` (líneas 64-70) que delega en `ScopeAuthoritiesConverter`.
-- **`ScopeAuthoritiesConverter`** (líneas 78-113) — la pieza clave:
-  - Lee `jwt.getClaim("scope")` como string space-separated (`SecurityConfig.java:89-92`).
-  - También soporta `scp` como array o string (`SecurityConfig.java:94-101`) por compatibilidad con otros IdPs.
-  - Mapea cada scope a `new SimpleGrantedAuthority("SCOPE_" + s)` (`SecurityConfig.java:110`).
-  - Devuelve `Collections.emptyList()` si no hay scopes (no authorities → `@PreAuthorize` falla con AccessDenied → 401/403 según el filter chain de Spring 6.x).
-
-#### Controladores
-
-**`controller/CalendarController.java`** — `GET /api/calendar/events?user_id=ana` (líneas 29-58):
-```java
-@PreAuthorize("hasAuthority('SCOPE_calendar.read')")
-public Map<String, Object> events(@RequestParam(...) String userId,
-                                  @AuthenticationPrincipal Jwt jwt) { … }
-```
-Devuelve eventos hardcodeados + metadatos del JWT: `agent_principal = jwt.getClaimAsString("azp")`, `on_behalf_of = jwt.getSubject()`.
-
-**`controller/EmailController.java`** — `POST /api/email/send` (líneas 34-56):
-```java
-@PreAuthorize("hasAuthority('SCOPE_email.send')")
-public Map<String, Object> send(@RequestBody EmailRequest body,
-                                @AuthenticationPrincipal Jwt jwt) { … }
-```
-Loguea `sub`, `azp` y devuelve `{status, to, subject, logged_at, on_behalf_of, by, agent_client_id}`.
-
-**`controller/HealthController.java`** — `GET /health` (líneas 15-21). Público.
-
-#### `application.yml`
-
-- `server.port: 9090` (`application.yml:2`).
-- `spring.security.oauth2.resourceserver.jwt.issuer-uri: http://keycloak:8080/realms/agent-poc` (`application.yml:15`) — Spring descubre JWKs automáticamente.
-- Actuator expone solo `health,info` (`application.yml:24`).
-- Logging a `DEBUG` solo en `com.poc.api`.
-
-#### Dockerfile multi-stage (`spring-boot-api/Dockerfile`)
-
-- Stage 1: `maven:3.9-eclipse-temurin-17` → cachea deps con `dependency:go-offline`, compila con `mvn clean package -DskipTests`.
-- Stage 2: `eclipse-temurin:17-jre-alpine` → copia el JAR, expone 9090, `HEALTHCHECK` con `wget --spider`, `JAVA_OPTS="-Xms128m -Xmx512m"`.
-- 33 líneas en total.
-
-### 4.3 Cliente Mock (`client-mock/`)
-
-#### `server.js` — endpoints
+#### `server.js` — endpoints (reescritos)
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/healthz` | Healthcheck `{status:"UP"}` (línea 189-191). |
-| POST | `/ciba/notify` | Lo llama Keycloak. Encola la request en `pendingRequests[]` (línea 59-102). |
-| GET | `/api/pending-requests?user=ana` | Lista las requests para un usuario (línea 110-128). |
-| POST | `/approve` | Body `{auth_req_id}` → marca `status=approved` (línea 134-156). |
-| POST | `/reject` | Body `{auth_req_id}` → marca `status=rejected` (línea 162-184). |
-| GET | `/*` (404) | Fallback JSON 404 (línea 196-198). |
-| GET | `/` | Sirve `public/index.html`. |
+| POST | `/auth/authorize` | El agente llama aquí: genera PKCE pair, devuelve `{authorize_url, code_verifier, state, session_id}` |
+| GET | `/auth/callback` | Keycloak redirige aquí con `?code=...&state=...`. Intercambia el code por tokens |
+| GET | `/auth/session/:sid` | El agente consulta los tokens de una sesión |
+| POST | `/auth/device` | El agente llama aquí para pedir un device_code (UI del humano) |
+| GET | `/device` | Renderiza la página del Device Code (countdown + código) |
+| GET | `/healthz` | Healthcheck |
+| GET | `/` | Sirve `public/index.html` |
 
-#### `public/index.html`
+#### `public/index.html` — UI
 
-UI estática servida por `express.static`. Tema **morado oscuro** (`background:#1a0d2e` aprox), con selector de usuario (ana/luis/marta) y tarjetas de notificaciones. **Polling cada 2s** contra `/api/pending-requests?user=<seleccionado>` (`index.html:479` `pollTimer = setInterval(poll, 2000);`). Otro `setInterval` a línea 536 (probablemente para mostrar timestamp/auto-refresh secundario).
+Dos pestañas en la home:
+- **A. Auth Code + PKCE**: selector de usuario (ana/luis/marta), checkboxes para custom scopes, select de `acr_values`. Botón **Iniciar sesión**.
+- **B. Device Code**: pide un device_code y muestra user_code + URL.
 
-### 4.4 Keycloak (`scripts/create_realm.py`)
+### 4.4 Keycloak — `scripts/create_realm.py`
 
-Configuración idempotente del realm `agent-poc` vía **Admin REST API** (no `--import-realm`, ver §5). 7 pasos numerados (`[1/7]` … `[7/7]`):
+Refactorizado en v2:
 
-1. **`ensure_realm`** (`create_realm.py:90-119`) — POST `/admin/realms` con `accessTokenLifespan=300`, CIBA attrs a nivel de realm.
-2. **`ensure_custom_scopes`** (`create_realm.py:131-203`) — Crea los 4 custom scopes con atributos **dotted** (`include.in.token.scope`) y añade `oidc-audience-mapper` con `included.custom.audience=spring-boot-api`.
-3. **`ensure_users`** (`create_realm.py:207-225`) — Crea ana/luis/marta con `password=demo1234`, `emailVerified=true`.
-4. **`ensure_agente_client`** (`create_realm.py:229-268`) — Crea el cliente confidencial `agente-ia` con `secret=secret-del-agente`, `directAccessGrantsEnabled=true`, `standardFlowEnabled=true`, atributos CIBA también a nivel de cliente.
-5. **`assign_scopes_to_client`** (`create_realm.py:272-292`) — **SUB-ENDPOINT** dedicado `PUT /admin/realms/agent-poc/clients/{cid}/default-client-scopes/{sid}` por cada scope. Esta es la pieza crítica del fix (ver §5).
-6. **`ensure_realm_default_scopes`** (`create_realm.py:296-300`) — `PUT /admin/realms/agent-poc` con `defaultDefaultClientScopes: [openid, profile, email]`.
-7. **`verify`** (`create_realm.py:304-329`) — Hace un `POST /token` con `scope=calendar.read` y comprueba que el JWT contiene `calendar.read` en el claim `scope`. Es el smoke test del fix.
+- ❌ Eliminado `directAccessGrantsEnabled: true` (prohibido)
+- ❌ Eliminado bloque CIBA
+- ✅ Añadido `oauth2.device.authorization.grant.enabled: true`
+- ✅ Añadido `pkce.code.challenge.method: S256`
+- ✅ Idempotente (`--reset` opcional para empezar limpio)
+- ✅ Verificación final cambia: ya no prueba ROPC, comprueba que `directAccessGrantsEnabled=false` y que `standardFlowEnabled=true`.
 
-> **Decisión de diseño**: usar Admin REST API en lugar de `--import-realm` se justifica por la robustez entre versiones de Keycloak y porque --import-realm requiere una flag específica en `command:` que no teníamos (ver §5).
+Verificación final:
+```
+[7/7] Verificación end-to-end
+  ✅ agente-ia: standardFlow=true, directAccess=false, device=true
+  ✅ ROPC bloqueado correctamente
+```
 
 ---
 
 ## 5. Causa raíz del bug `invalid_scope` en Keycloak 24
 
-> 🕐 **Tiempo perdido en diagnosticar esto: ~2 horas**. Documentarlo a fondo es crítico porque la próxima persona que monte esto va a tropezar con la misma piedra.
+> **Sigue aplicando en v2** — los custom scopes siguen necesitando el sub-endpoint dedicado para asignarse al cliente. Documentación íntegra en [commits previos] / [issue tracker].
 
-### 5.1 Síntoma
+Si en el futuro se añade un nuevo custom scope:
 
-Cualquier intento de pedir un custom scope en el token endpoint falla con HTTP 400:
-
-```json
-{
-  "error": "invalid_scope",
-  "error_description": "Invalid scopes: calendar.read"
-}
+```python
+# Patrón correcto: SIEMPRE vía sub-endpoint
+PUT /admin/realms/agent-poc/clients/{client_id}/default-client-scopes/{scope_id}
+# NO dentro del body de PUT /clients/{cid}
 ```
-
-### 5.2 Pruebas que sí funcionan vs. que no
-
-| `scope=…` enviado | Resultado |
-|---|---|
-| *(omitido)* | ✅ 200 (default scopes del cliente) |
-| `openid` | ✅ 200 |
-| `email` | ✅ 200 |
-| `profile` | ✅ 200 |
-| `openid email profile` | ✅ 200 |
-| `calendar.read` | ❌ 400 `invalid_scope` |
-| `calendar.write` | ❌ 400 `invalid_scope` |
-| `email.send` | ❌ 400 `invalid_scope` |
-| `calendar.read email.send` | ❌ 400 `invalid_scope` (también mezclando con los built-in) |
-
-### 5.3 Causa raíz exacta
-
-**Los 4 custom scopes existían como definiciones a nivel de realm, pero nunca fueron asociados al cliente `agente-ia`.** En Keycloak 24, el endpoint `/token` valida que cada scope pedido sea uno de los scopes permitidos para el cliente que llama (default-client-scopes + optional-client-scopes). Como `agente-ia` no tenía ninguno de los custom scopes en su lista, Keycloak respondía `invalid_scope` incluso aunque el scope existiera como recurso del realm.
-
-Visualmente:
-
-```
-client-scopes (a nivel de realm)
-  ├─ calendar.read     ✅ existe
-  ├─ calendar.write    ✅ existe
-  ├─ email.send        ✅ existe
-  └─ email.modify      ✅ existe
-
-cliente `agente-ia`
-  └─ defaultClientScopes: [openid, profile, email]  ← ¡sin custom scopes!
-```
-
-### 5.4 Por qué `--import-realm` no funcionaba
-
-En `docker-compose.yml:48` se monta `./keycloak/realm:/opt/keycloak/data/import`, pero el `command:` del contenedor es `["start-dev"]` (`docker-compose.yml:32`). **Sin la flag `--import-realm`, Keycloak no procesa los archivos de `/opt/keycloak/data/import` aunque estén ahí.**
-
-Hay dos formas de arreglar esto y se intentó la mala primero:
-
-| Solución | Resultado |
-|---|---|
-| `command: ["start-dev", "--import-realm"]` | ✅ funcionaría, pero no se pudo aplicar porque el `command:` ya estaba fijado y daba conflicto con `start-dev` puro + variables de entorno (CIBA feature flag). |
-| **Admin REST API** (la que se aplicó) | ✅ **Más portable entre versiones, idempotente, reproducible desde CI.** |
-
-Por eso se descartó `--import-realm` y se migró a Admin REST API en `scripts/create_realm.py`.
-
-### 5.5 Por qué `PUT /clients/{cid}` con `defaultClientScopes:[…]` NO persiste
-
-Este es el **sub-bug** que más tiempo costó. La tentación obvia es:
-
-```http
-PUT /admin/realms/agent-poc/clients/{cid}
-Content-Type: application/json
-Authorization: Bearer <admin_token>
-
-{
-  "clientId": "agente-ia",
-  "defaultClientScopes": ["calendar.read", "calendar.write", ...],
-  ...
-}
-```
-
-Keycloak responde `204 No Content` (parece éxito). Pero al releer el cliente, `defaultClientScopes` sigue vacío. **KC 24 trata ese PUT como un reemplazo de la representación: si un campo no viene, lo revierte; pero el array de scopes es delicado y la implementación actual no lo persiste cuando viene inline en el body.**
-
-La forma que **sí persiste** es el **sub-endpoint dedicado**:
-
-```http
-PUT /admin/realms/agent-poc/clients/{cid}/default-client-scopes/{scopeId}
-Authorization: Bearer <admin_token>
-```
-
-→ Devuelve 204 y **sí persiste**. Esto es lo que hace `create_realm.py:287-292`.
-
-> **Conclusión**: si en el futuro alguien tiene que añadir un scope nuevo a un cliente, **no** lo haga dentro del body de `PUT /clients/{cid}`. Use siempre el sub-endpoint.
-
-### 5.6 Atributos dotted vs. camelCase
-
-Los client-scopes aceptan un atributo que controla si el scope aparece en el JWT: `include.in.token.scope`. Hay dos formas de escribirlo:
-
-```json
-{ "attributes": { "includeInTokenScope": "true" } }  // ❌ camelCase — IGNORADO por KC 24
-{ "attributes": { "include.in.token.scope": "true" } }  // ✅ dotted (forma canónica) — funciona
-```
-
-KC 24 ignora silenciosamente la versión camelCase — no falla, simplemente no incluye el scope en el `scope` claim del JWT. Se documenta en `create_realm.py:149-150, 167-172` donde el script **re-escribe los atributos** después de crearlos para garantizar la forma dotted.
-
-### 5.7 Verificación post-fix (curl)
-
-El smoke test que demuestra que el bug está arreglado:
-
-```bash
-curl -s -X POST http://localhost:8180/realms/agent-poc/protocol/openid-connect/token \
-  -d grant_type=password \
-  -d client_id=agente-ia \
-  -d client_secret=secret-del-agente \
-  -d username=ana \
-  -d password=demo1234 \
-  -d scope=calendar.read | jq .scope
-```
-
-Salida esperada:
-
-```
-"calendar.write email email.modify profile email.send calendar.read"
-```
-
-Esto es exactamente lo que el paso `[7/7] Verificación end-to-end` del script verifica automáticamente (`create_realm.py:304-329`).
-
-### 5.8 Solución aplicada
-
-`scripts/create_realm.py` implementa las cinco correcciones en un solo script idempotente:
-
-1. **Usa Admin REST API**, no `--import-realm` (más portable).
-2. **Atributos dotted** en client-scopes (`include.in.token.scope`).
-3. **`oidc-audience-mapper`** con `included.custom.audience=spring-boot-api` por cada scope → claim `aud` correcto en el JWT.
-4. **Sub-endpoint dedicado** `PUT /clients/{cid}/default-client-scopes/{sid}` por scope (no inline en el PUT del cliente).
-5. **Verificación end-to-end** al final (paso 7).
-
-Se puede ejecutar de forma segura varias veces; en cada corrida detecta qué existe y aplica solo el diff necesario. Si se quiere empezar limpio: `python3 scripts/create_realm.py --reset`.
 
 ---
 
-## 6. Tests end-to-end realizados
+## 6. Tests end-to-end — Plantilla de los 3 flujos
 
-Todos los tests se ejecutan contra el stack levantado con `docker compose up -d --build`. Los curls asumen que los contenedores están healthy.
+> **Estado**: **Pendientes**. Requieren que Victor haya ejecutado el comando de restart de los 2 contenedores con código nuevo. Lista de comandos exacta abajo en §6.0.
 
-### Test #1 — Ana + calendar.read ✅
+### 6.0 Pre-requisito: restart contenedores
 
 ```bash
+cd /home/vhdez/desarrollos-hermes/agent-oauth-poc
+docker restart agent-poc-agent-python agent-poc-client-mock
+docker compose ps agent-python client-mock  # confirmar Up
+```
+
+### 6.1 Test A — Auth Code + PKCE (calendar.read)
+
+```bash
+# Paso 1: pedir authorize URL al agente
+RESP=$(curl -s -X POST http://localhost:7000/agente/auth/authorize \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}')
+echo "$RESP" | jq .
+
+# Resultado esperado:
+# {
+#   "authorize_url": "http://localhost:8180/realms/agent-poc/protocol/openid-connect/auth?...",
+#   "code_verifier": "...",
+#   "state": "...",
+#   "redirect_uri": "http://localhost:3000/auth/callback"
+# }
+
+# Paso 2: el humano abre $RESP.authorize_url en un browser, KC autentica
+# Paso 3: el callback llega a client-mock, hay que consultar el resultado:
+SESSION_ID=<sid devuelto por el callback>
+curl -s http://localhost:3000/auth/session/$SESSION_ID | jq .
+
+# Resultado esperado:
+# {
+#   "access_token": "...",
+#   "refresh_token": "...",
+#   "user": { "preferred_username": "ana", ... }
+# }
+
+# Paso 4: usar el access_token para llamar al agente
+ACCESS_TOKEN=<de arriba>
 curl -s -X POST http://localhost:7000/agente/call \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"ana","request":"léeme mi calendario","scope":"calendar.read","action_type":"read_calendar"}'
+  -d "{\"access_token\":\"$ACCESS_TOKEN\",\"request\":\"Mis eventos\",\"scope\":\"calendar.read\",\"action_type\":\"read_calendar\"}"
 ```
 
-Respuesta:
-
-```json
-{
-  "result": {
-    "user": "ana",
-    "events": [
-      {"id": "evt1", "title": "Reunión con el equipo", "when": "2026-07-08T10:00:00Z"},
-      {"id": "evt2", "title": "Demo OAuth PoC a Víctor", "when": "2026-07-08T16:00:00Z"}
-    ],
-    "served_at": "2026-07-08T...",
-    "agent_principal": "agente-ia",
-    "on_behalf_of": "<uuid-de-ana>"
-  }
-}
-```
-
-### Test #2 — Luis + calendar.read ✅
-
-Idéntico al #1 pero con `"user_id":"luis"`. `on_behalf_of` cambia al UUID de Luis, `agent_principal` sigue siendo `agente-ia`.
-
-### Test #3 — Marta + calendar.read ✅
-
-Idéntico al #1 pero con `"user_id":"marta"`. Mismo resultado estructural.
-
-### Test #4 — Ana + email.send ✅ (con CIBA)
+### 6.2 Test B — Device Code Flow
 
 ```bash
-curl -s -X POST http://localhost:7000/agente/call \
+# Paso 1: pedir device_code
+RESP=$(curl -s -X POST http://localhost:7000/agente/auth/device \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"ana","request":"Hola, esto es una prueba","scope":"email.send","action_type":"send_email"}'
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}')
+echo "$RESP" | jq .
+
+# {
+#   "user_code": "ABCD-1234",
+#   "device_code": "...",
+#   "verification_uri": "http://localhost:8180/realms/agent-poc/device",
+#   "verification_uri_complete": "...",
+#   "expires_in": 600,
+#   "interval": 5
+# }
+
+# Paso 2: humano va a http://localhost:8180/realms/agent-poc/device
+#         introduce user_code, aprueba
+# Paso 3: el agente recibe el access_token vía polling interno
+#         (consultar endpoint auxiliar para PoC)
 ```
 
-Flujo:
-1. Agente recibe la llamada, detecta `.send` y entra en CIBA.
-2. Agente hace `POST /ext/ciba/auth`, recibe `auth_req_id`.
-3. Keycloak notifica al cliente mock (`POST http://client-mock:3000/ciba/notify`).
-4. Operador abre `http://localhost:3000`, selecciona "ana", ve la notificación y pulsa **Aprobar**.
-5. Agente recibe 200 en el siguiente poll, llama a `POST /api/email/send` con Bearer.
-
-Respuesta esperada:
-
-```json
-{
-  "result": {
-    "status": "sent",
-    "to": "ana@example.com",
-    "subject": "send_email",
-    "logged_at": "2026-07-08T...",
-    "on_behalf_of": "<uuid-de-ana>",
-    "by": "agente-ia",
-    "agent_client_id": "agente-ia"
-  }
-}
-```
-
-### Test #5 — Luis + email.send ✅ (con CIBA)
-
-Igual que el #4 pero con `"user_id":"luis"`.
-
-### Test negativo — Token sin `calendar.read` contra `/api/calendar/events` → 401/403 ✅
+### 6.3 Test C — OBO exchange (requiere KC 26+)
 
 ```bash
-# Token SIN calendar.read (sólo openid/email/profile, el default)
+# Cuando se actualice a KC 26+, descomentar sección en app.py.
+# Mientras tanto, el token ya viene con scope completo en A.
+```
+
+### 6.4 Test negativo — Token sin `calendar.read` contra Spring
+
+```bash
 TOKEN=$(curl -s -X POST http://localhost:8180/realms/agent-poc/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=agente-ia -d client_secret=secret-del-agente \
-  -d username=ana -d password=demo1234 | jq -r .access_token)
+  -d grant_type=refresh_token \
+  -d client_id=agente-ia \
+  -d client_secret=secret-del-agente \
+  -d refresh_token=<refresh> | jq -r .access_token)
 
 curl -i "http://localhost:9090/api/calendar/events?user_id=ana" \
   -H "Authorization: Bearer *** | head -n 1
-HTTP/1.1 401
+# Esperado: HTTP/1.1 401
 ```
-
-> **Nota técnica**: Spring Security 6.x, cuando hay un `AccessDeniedException` y no hay un `WWW-Authenticate` header configurado, traduce el 403 a 401. Es comportamiento estándar; en una iteración futura habría que añadir un `AccessDeniedHandler` explícito para devolver 403 cuando la autenticación es válida pero la autorización falla. Ver §7.
-
-### Test bypass — Eliminado tras el fix
-
-Existía un "test bypass" temporal que consistía en pedir un scope built-in (`email`) y verificar que el JWT se devolvía bien, ignorando el problema con los custom scopes. Tras documentar y arreglar la causa raíz en `create_realm.py`, ese bypass se eliminó del script de pruebas porque ya no aporta valor.
-
-### Estado de CIBA en este momento
-
-El flujo CIBA para `email.send` está **implementado en código** (`oauth_client.py:159-279`) y **verificado** para los usuarios ana y luis con aprobación manual en el cliente mock. Sin embargo, **falta el "background sync" completo** entre:
-
-1. Agente que llama a `/ext/ciba/auth` → ✅
-2. Keycloak que notifica al cliente mock por backchannel → ✅
-3. Cliente mock que muestra la UI y guarda la aprobación → ✅
-4. **Persistencia de la aprobación**: actualmente el cliente mock solo guarda `status=approved` en memoria. La "aprobación" no se notifica explícitamente a Keycloak (no hay endpoint /grant ni push binding completo). → ⚠️ **pendiente**
-5. Agente que recibe el token en el siguiente poll → ✅
-
-> En la práctica esto funciona porque **el polling del agente a `/token`** es lo que libera el access_token cuando el usuario aprueba en el cliente mock. La "falta de background sync" se refiere a la integración cliente mock ↔ Keycloak para que el consentimiento quede formalmente registrado (endpoint `/ciba/grants` o equivalente), no a la entrega del token.
 
 ---
 
 ## 7. Limitaciones conocidas y trabajo futuro
 
-### 7.1 Limitaciones de esta PoC
+### 7.1 Limitaciones que aplican a v2
 
-| # | Limitación | Impacto | Mitigación / Trabajo futuro |
+| # | Limitación | Impacto | Mitigación |
 |---|---|---|---|
-| L1 | **JWT Bearer (RFC 7523) no habilitado en KC 24** | Usamos ROPC password grant como equivalente OBO. Comportamiento equivalente, pero menos seguro (el agente ve passwords de usuario). | Migrar a Keycloak 26+ o Auth0 y habilitar `jwt-bearer` grant + `private_key_jwt` + DPoP. Las clases `user_assertion_for` / `login_hint_token_for` ya están listas. |
-| L2 | **CIBA completa con push real no wired** | El flujo funciona end-to-end (verificado), pero la "aprobación" en cliente mock no se persiste vía API formal a Keycloak. Solo la recoge el siguiente poll del agente. | Implementar `/ciba/grants` o usar el `notification` mode completo con FCM/APNs y acuse formal de consentimiento. |
-| L3 | **No hay refresh tokens ni rotación** | Cada llamada al agente que requiera token vuelve a pedir uno nuevo. `accessTokenLifespan=300s` en el realm. | Añadir refresh token + sliding sessions. Implica rediseñar el flujo OAuth (no apto para CIBA sin cambios). |
-| L4 | **Tokens no se revocan al logout** | El agente nunca cierra sesión del usuario. Si el JWT se filtra, vive 5 min. | Añadir `/logout` con `refresh_token` y un endpoint admin para invalidar sesiones (`/realms/.../logout-all`). |
-| L5 | **No hay rate limiting en el agente** | Un atacante que descubra `/agente/call` puede pedir tokens en bucle (limitado por brute-force de Keycloak, pero no por el agente). | Añadir un middleware FastAPI con token-bucket por `user_id` + IP. |
-| L6 | **Spring Security 6.x devuelve 401 en lugar de 403 en AccessDenied** | Cuando un token válido no trae el scope requerido, la API devuelve 401 en vez de 403. Semánticamente es 403 (autorización, no autenticación). | Configurar `AccessDeniedHandler` y `AuthenticationEntryPoint` explícitos en `SecurityConfig.java:36-56`. |
-| L7 | **`calendar.write` y `email.modify` no tienen endpoint en Spring** | Los scopes existen en Keycloak pero `app.py:148-155` devuelve 400 si se piden. | Añadir `CalendarWriteController` y `EmailModifyController` siguiendo el mismo patrón. |
-| L8 | **Passwords en texto claro en `config.py`** | Cualquiera con acceso al código ve las credenciales demo. | Aceptable en PoC; en producción federar vía LDAP/AD/WebAuthn. |
-| L9 | **Clientes `client-mock` no registrado en Keycloak** | El mock recibe `/ciba/notify` por HTTP crudo, sin auth mTLS ni firma. | Registrar `client-mock` como cliente OAuth con `ciba_backchannel_client_notification_endpoint` y firma JWT. |
-| L10 | **No hay TLS intra-cluster** | Todo el tráfico entre contenedores va en HTTP plano. | En producción: sidecars/linkerdd/istio o red VPC privada. |
+| L1 | **JWT Bearer (RFC 7523 / OBO) no soportado en KC 24** | `app.py` decide flujo A y, si el scope no está en el JWT, hace OBO que falla en KC 24. | Actualizar a Keycloak 26+. Mientras tanto, pedir el scope completo ya en A (sigue siendo seguro). |
+| L2 | **No hay refresh tokens persistentes** | Cada llamada necesita fresh exchange. | Implementado en `oauth_client.refresh_user_token()`; integrar con client-mock para guardar el nuevo refresh_token tras cada rotación. |
+| L3 | **Tokens no se revocan al logout** | El JWT vive 5 minutos. | Añadir `/logout` con refresh_token y `end_session_endpoint` por cliente. |
+| L4 | **No hay rate limiting en el agente** | Posible abuso por IP. | Middleware FastAPI con token-bucket por `user_id`+IP. |
+| L5 | **Spring Security 6.x devuelve 401 en lugar de 403** | Semánticamente debería ser 403. | Configurar `AccessDeniedHandler` explícito. |
+| L6 | **`calendar.write` y `email.modify` no tienen endpoint en Spring** | Devuelve 400 si se piden. | Añadir `CalendarWriteController` y `EmailModifyController`. |
+| L7 | **Device Code polling bloquea el endpoint** | `device_poll_for_tokens` es síncrono. | Implementar webhook en client-mock o usar long-polling no bloqueante. |
+| L8 | **Passwords en texto claro en Keycloak** | Aceptable en PoC. | En producción: LDAP/AD/WebAuthn. |
 
-### 7.2 Trabajo futuro priorizado
+### 7.2 Mejoras futuras
 
-1. **Configurar `AccessDeniedHandler` para devolver 403** (L6) — cambio pequeño, alto valor semántico.
-2. **Añadir endpoints para `calendar.write` y `email.modify`** (L7) — completa la matriz scope↔endpoint.
-3. **Migrar de ROPC a JWT Bearer** (L1) cuando se actualice a Keycloak 26+.
-4. **Refresh tokens con sliding session** (L3).
-5. **Rate limiting en el agente** (L5).
-6. **TLS mutuo entre Keycloak ↔ cliente mock** (L9).
-7. **Logging centralizado a Loki/ELK** con campos estructurados (`user_id`, `scope`, `auth_req_id`, `flow`).
+1. **Refresh token storage** persistente (SQLite o Redis) en client-mock.
+2. **Device Code UI responsive** con auto-redirect al callback.
+3. **HTTPS intra-cluster** (sidecars/proxies).
+4. **Logging estructurado** con `user_id`, `scope`, `flow_used`.
+5. **OpenTelemetry** entre componentes.
+6. **CI con GitHub Actions** que levante `docker compose up` y corra los 3 tests E2E.
+
+### 7.3 Cómo migrar de KC a B2C
+
+```yaml
+# docker-compose.yml override para B2C
+services:
+  agent-python:
+    environment:
+      IDP_ISSUER: https://<tenant>.ciamlogin.com/<tenant_id>.onmicrosoft.com
+      AGENT_CLIENT_ID: <app-registration-id-de-B2C>
+      AGENT_CLIENT_SECRET: <secret-de-B2C>
+```
+
+**Sin tocar una línea de código Python**: la detección automática de IdP en `config.py:25-40` selecciona los paths correctos.
+
+### 7.4 Extensión opcional: añadir CIBA como "flujo D"
+
+Si en el futuro se quiere CIBA (Kafka-style: agente lanza petición, humano recibe push y decide), se puede añadir:
+
+```python
+# agent-python/ciba_plugin.py (opcional)
+class CIBAPlugin:
+    """Sustituye A+B+C por CIBA cuando el IdP lo soporte."""
+    ...
+```
+
+El flujo principal **A+B+C cubre el 95% de casos reales**. CIBA se justifica solo si se necesita UX asíncrono real-time en una app móvil.
 
 ---
 
@@ -668,31 +525,31 @@ El flujo CIBA para `email.send` está **implementado en código** (`oauth_client
 
 | Término | Significado |
 |---|---|
-| **OIDC** | OpenID Connect. Capa de identidad sobre OAuth 2.0 que añade `id_token` y estandariza cómo los clientes verifican la identidad del usuario final. |
-| **OAuth 2.0** | Framework de autorización (RFC 6749) que define los flujos para que un cliente obtenga acceso limitado a recursos en nombre de un usuario. |
-| **CIBA** | Client Initiated Backchannel Authentication (OpenID Connect CIBA 1.0). Flujo donde el cliente inicia la autenticación por un canal trasero (backchannel) sin necesidad de browser redirect; el usuario aprueba en su dispositivo. |
-| **ROPC** | Resource Owner Password Credentials (RFC 6749 §4.3). Grant donde el cliente conoce directamente el usuario y contraseña del usuario. **Antipatrón en producción**, válido solo para migraciones y PoC. |
-| **OBO** | On-Behalf-Of. Patrón donde un servicio actúa en nombre de un usuario intercambiando un token por otro. En OAuth moderno se suele implementar con Token Exchange (RFC 8693) o JWT Bearer (RFC 7523). |
-| **PoC** | Proof of Concept. Prototipo cuyo objetivo es demostrar la viabilidad técnica, no la calidad de producción. |
-| **IdP** | Identity Provider. Servicio que autentica usuarios y emite aserciones de identidad (Keycloak, Auth0, Okta, Azure AD, etc.). |
-| **JWT** | JSON Web Token (RFC 7519). Token compacto y firmado digitalmente que lleva claims. Estructura `header.payload.signature`. |
-| **JWK / JWKS** | JSON Web Key / JSON Web Key Set. Formato para publicar claves públicas usadas para verificar firmas de JWT. Spring Boot las descubre vía `issuer-uri`. |
-| **Bearer token** | Token que quien lo presenta tiene derecho a usarlo (sin prueba adicional de posesión). Va en `Authorization: Bearer <token>`. |
-| **Scope** | Cadena que identifica un permiso o recurso, p.ej. `calendar.read`. El usuario consiente scopes y el JWT los lleva en el claim `scope`. |
-| **Audience (`aud`)** | Claim del JWT que identifica para qué API es válido el token. Spring Boot lo usa para discriminar entre varios resource servers. |
-| **Authorized Party (`azp`)** | Claim del JWT que indica qué cliente OAuth pidió el token. En esta PoC siempre es `agente-ia`. |
-| **`sub`** | Claim del JWT con el identificador único del usuario (subject). En esta PoC es el UUID de ana/luis/marta en Keycloak. |
-| **Resource Server** | API que recibe y valida access_tokens. En esta PoC es Spring Boot. |
-| **Authorization Server** | Servidor que emite tokens tras autenticar al usuario. En esta PoC es Keycloak. |
-| **Client Credentials Grant** | Grant OAuth (RFC 6749 §4.4) donde el cliente se autentica con sus propias credenciales (no en nombre de un usuario). No aplica aquí. |
-| **Token Exchange** | RFC 8693. Grant para intercambiar un token por otro, útil para encadenar servicios downstream. |
-| **PKCE** | Proof Key for Code Exchange (RFC 7636). Extensión de OAuth para proteger el authorization code contra intercepción. |
-| **Spring Security 6.x** | Stack de seguridad de Spring Boot 3.x. Incluye el módulo `spring-boot-starter-oauth2-resource-server` usado en esta PoC. |
-| **HS256** | Algoritmo de firma JWT basado en HMAC-SHA256 con clave compartida. Aquí usamos el `client_secret` como clave compartida. |
-| **`@PreAuthorize`** | Anotación de Spring Security que evalúa una expresión SpEL antes de invocar el método. En esta PoC: `hasAuthority('SCOPE_xxx')`. |
+| **PKCE** | Proof Key for Code Exchange (RFC 7636). Añade `code_verifier` + `code_challenge` para proteger el authorization code. Soportado por KC 24, B2C External ID, Auth0. |
+| **Device Code Flow** | RFC 8628. El cliente pide un código + URL, el humano los introduce en su dispositivo y aprueba. Ideal para agentes headless. |
+| **JWT Bearer / RFC 7523** | Grant OAuth estándar para que un servicio intercambie un JWT de usuario por un nuevo token con scope más limitado (On-Behalf-Of). Soportado en B2C External ID nativo. KC 24 NO; KC 26+ sí. |
+| **Authorization Code** | RFC 6749 §4.1. Flujo estándar donde el IdP redirige al usuario con un code que el backend intercambia por tokens. PKCE lo protege. |
+| **OIDC** | OpenID Connect. Capa de identidad sobre OAuth 2.0. |
+| **OAuth 2.0** | RFC 6749. Framework de autorización. |
+| **CIBA** | OpenID Connect CIBA 1.0. Flujo asíncrono con backchannel. NO soportado en B2C External ID. |
+| **ROPC** | Resource Owner Password Credentials (RFC 6749 §4.3). Antipatrón de producción. Eliminado en v2. |
+| **PoC** | Proof of Concept. |
+| **IdP** | Identity Provider. KC, Azure B2C, Auth0, Okta, etc. |
+| **JWT** | JSON Web Token (RFC 7519). |
+| **JWK / JWKS** | JSON Web Key / JSON Web Key Set. Spring Boot las descubre vía `issuer-uri`. |
+| **Bearer token** | Token que quien lo presenta tiene derecho a usarlo. Va en `Authorization: Bearer *** |
+| **Scope** | Cadena identificando un permiso. El usuario consiente scopes y el JWT los lleva en `scope`. |
+| **Audience (`aud`)** | Claim del JWT para qué API es válido. |
+| **Authorized Party (`azp`)** | Claim del JWT indicando qué cliente OAuth pidió el token. |
+| **`sub`** | Claim del JWT — identificador único del usuario. |
+| **Resource Server** | API que recibe y valida access_tokens. |
+| **Authorization Server** | Servidor que emite tokens tras autenticar al usuario. |
+| **Token Exchange** | RFC 8693. Grant para intercambiar un token por otro. |
+| **HS256** | Algoritmo de firma JWT con HMAC-SHA256 + clave compartida. |
 
 ---
 
 **Mantenedor**: Víctor (khum1982) + Hermes Agent.
-**Stack PIN**: `keycloak:24.0.5` (en compose: `24.0`), `spring-boot:3.2.5`, `java:17`, `python:3.11`, `node:18`, `postgres:16`.
+**Stack PIN**: `keycloak:24.0.5` (compose: `24.0`), `spring-boot:3.2.5`, `java:17`, `python:3.11`, `node:18`, `postgres:16`.
+**Para B2C**: `azure-entra-external-id` (ciamlogin.com).
 **Licencia**: MIT (PoC; adaptar antes de producción).

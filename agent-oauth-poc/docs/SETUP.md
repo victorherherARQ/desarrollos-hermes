@@ -1,96 +1,116 @@
-# SETUP · agent-oauth-poc
+# SETUP · agent-oauth-poc — v2 (A+B+C)
 
-> Guía paso-a-paso reproducible para levantar la PoC **`agent-oauth-poc`** desde cero en una máquina nueva (WSL2 / Linux / macOS) y ejecutar los **5 tests end-to-end** que demuestran el patrón "agente IA con OAuth 2.0 + CIBA".
+> Guía paso-a-paso reproducible para levantar la PoC **`agent-oauth-poc`** v2 desde cero en una máquina nueva (WSL2 / Linux / macOS) y ejecutar los **3 flujos** A+B+C contra Keycloak 24 (o contra Azure B2C External ID).
+>
+> **Cambios clave v2**:
+> - ❌ Eliminado password credentials grant (ROPC) — inseguro
+> - ❌ Eliminado CIBA — sustituido por Auth Code + PKCE con MFA síncrono
+> - ✅ Añadidos 3 flujos estándar: A (Auth Code + PKCE), B (Device Code), C (OBO)
+> - ✅ Portable KC ↔ B2C: misma arquitectura, solo cambia `IDP_ISSUER`
 >
 > Tiempo total estimado: **~10 min** (de los cuales ~3 min son build de Spring Boot la primera vez).
 
 ---
 
-## 1. TL;DR (30 segundos)
+## 1. TL;DR (60 segundos)
 
 ```bash
 # 1) Clonar el repo
-git clone https://github.com/victorherherARQ/agent-oauth-poc.git
-cd agent-oauth-poc
+git clone https://github.com/victorherherARQ/desarrollos-hermes.git
+cd desarrollos-hermes/agent-oauth-poc
 
-# 2) Arrancar los 5 contenedores (Postgres, Keycloak, Spring API, Agente Python, Client Mock)
+# 2) Arrancar los 5 contenedores
 docker compose up -d --build
 
-# 3) Esperar a que Keycloak termine de arrancar y aceptar conexiones
+# 3) Esperar a que Keycloak termine de arrancar
 until curl -sf http://localhost:8180/realms/master/.well-known/openid-configuration > /dev/null; do
   sleep 3; echo "esperando Keycloak..."; done && echo "Keycloak ready"
 
-# 4) Provisionar el realm "agent-poc" con 3 usuarios, 4 custom scopes y el cliente agente-ia
-python3 scripts/create_realm.py --reset
+# 4) Provisionar el realm "agent-poc" (sin password grant, con PKCE + Device Code)
+KEYCLOAK_URL=http://localhost:8180 python3 scripts/create_realm.py --reset
 
-# 5) Probar el flujo completo (Ana → calendario)
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"ana","request":"léeme mi calendario","scope":"calendar.read","action_type":"calendar"}' | jq .
+# 5) Probar el flujo A — Auth Code + PKCE
+curl -s -X POST http://localhost:7000/agente/auth/authorize \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}' | jq .
+# → recibe authorize_url + code_verifier + state
 
 # 6) Health-check rápido
 curl -s http://localhost:7000/agente/health | jq .
-# → {"status":"UP"}
+# → {"status":"UP","idp_issuer":"...","supported_flows":["A:auth_code+pkce","B:device_code","C:obo"]}
 ```
 
-Si los 6 pasos anteriores pasan, **la PoC está funcionando**. El resto del documento solo detalla cómo y por qué.
+Si los 6 pasos anteriores pasan, **la PoC v2 está funcionando**.
 
 ---
 
 ## 2. Arquitectura en 30 segundos
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                  USUARIO                                     │
-│                              (Ana / Luis / Marta)                            │
-└──────────────────────────────────────────────────────────────────────────────┘
-                                     ▲ ② push / approve
-                                     │
-┌───────────────────────┐    ① peticion de agente    ┌────────────────────────┐
-│   Client Mock (UI)    │ ◀────────────────────────▶│   Agente Python (IA)   │
-│   :3000 (Node 20)     │   "léeme mi calendario"   │   :7000 (FastAPI)      │
-│   ciient-mock/        │                           │   agent-python/        │
-└───────────────────────┘                           └──────┬─────────────────┘
-                                                          │ ③ ROPC + JWT
-                                                          ▼
-┌───────────────────────┐    ④ access_token JWT     ┌────────────────────────┐
-│   Spring Boot API     │ ◀────────────────────────│   Keycloak 24 (IdP)    │
-│   :9090 (Java 21)     │   GET /api/calendar/...   │   :8180 (Quarkus)      │
-│   spring-boot-api/    │                           │   + CIBA habilitado    │
-└───────────────────────┘                           └──────┬─────────────────┘
-       ▲                                                  │ persiste realms,
-       │ usa JDBC a                                    ⑤  usuarios, scopes
-       │                                                  ▼
-┌───────────────────────┐                           ┌────────────────────────┐
-│   PostgreSQL 16       │ ◀─────────────────────────│   (volumen docker)     │
-│   (interno, sin       │                           │   postgres-data        │
-│    puerto expuesto)   │                           │                        │
-└───────────────────────┘                           └────────────────────────┘
+┌──────────────────────────────────────────────┐
+│                USUARIO (Humano)                │
+│     (browser / smartphone — login en IdP)     │
+└──────────────┬───────────────────────────────┘
+               │ A: Auth Code + PKCE (browser)
+               │    o B: Device Code (CLI sin UI)
+               │
+┌──────────────▼───────────────────────────────┐
+│  client-mock (webapp del usuario)              │
+│  :3000 (Node 18)                              │
+│  - Recibe /auth/authorize del agente           │
+│  - Redirige al browser del humano al IdP      │
+│  - Gestiona el callback con PKCE              │
+│  - Muestra Device Code si aplica              │
+└──────────────┬───────────────────────────────┘
+               │ (code, refresh_token)
+               ▼
+┌──────────────────────────────────────────────┐
+│  agent-poc-agent-python (el agente IA)        │
+│  :7000 (FastAPI)                              │
+│  - Auth Code + PKCE handler                   │
+│  - Device Code handler                        │
+│  - OBO exchange (refinar scope)               │
+│  - Llama a Spring API con Bearer              │
+└──────┬──────────────────────┬────────────────┘
+       │ JWT                  │ JWT
+       │ (paso 1)             │ (paso 2)
+┌──────▼─────────┐    ┌───────▼──────────────────────────────────┐
+│  Keycloak 24    │    │  spring-boot-api (Resource Server)       │
+│  :8180          │    │  :9090 (Java 17)                          │
+│  (IdP, sin CIBA,│    │  - @PreAuthorize("hasAuthority('SCOPE_x)") │
+│   PKCE+Device   │    └──────────────────────────────────────────┘
+│   habilitados)  │
+└──────┬──────────┘
+       │ JDBC
+┌──────▼──────────┐
+│  PostgreSQL 16   │
+│  (interno)       │
+└──────────────────┘
 ```
 
 ### Mapeo de puertos host → servicio
 
-| Puerto host | Servicio          | Propósito                                              | URL                                                              |
-|-------------|-------------------|--------------------------------------------------------|------------------------------------------------------------------|
-| **3000**    | `client-mock`     | UI simulada del cliente iniciador de la transacción    | http://localhost:3000                                            |
-| **7000**    | `agent-python`    | API del agente IA (entrypoint principal)               | http://localhost:7000                                            |
-| **8180**    | `keycloak`        | Consola admin + endpoints OIDC/CIBA                    | http://localhost:8180/admin (admin / admin)                      |
-| **9090**    | `spring-boot-api` | Recurso protegido (Resource Server)                    | http://localhost:9090/api/calendar/events, /api/email/send       |
-| **5432**    | _no expuesto_     | Postgres vive solo dentro de la red `agent-poc-net`    | —                                                                |
+| Puerto host | Servicio | Propósito | URL |
+|---|---|---|---|
+| **3000** | `client-mock` | Webapp Auth Code + PKCE + Device Code UI | http://localhost:3000 |
+| **7000** | `agent-python` | API del agente IA | http://localhost:7000 |
+| **8180** | `keycloak` | IdP — Admin + endpoints OIDC | http://localhost:8180/admin |
+| **9090** | `spring-boot-api` | Resource Server protegido | http://localhost:9090/api/calendar/events, /api/email/send |
+| **5432** | _no expuesto_ | Postgres vive dentro del cluster | — |
 
 ---
 
 ## 3. Requisitos previos
 
-| Requisito                 | Versión mínima          | Cómo verificar                          |
-|---------------------------|-------------------------|------------------------------------------|
-| WSL2 / Linux / macOS      | Ubuntu 22.04 o similar  | `uname -a`                               |
-| Docker Engine o Docker Desktop | 24.0+ con `compose` v2 | `docker --version && docker compose version` |
-| Python (host)             | 3.11+                   | `python3 --version`                      |
-| `curl`                    | cualquier               | `curl --version`                         |
-| `jq`                      | cualquier               | `jq --version`                           |
-| RAM libre                 | 8 GB                    | `free -h`                                |
-| Disco libre               | 10 GB                   | `df -h ~`                                |
+| Requisito | Versión mínima | Cómo verificar |
+|---|---|---|
+| WSL2 / Linux / macOS | Ubuntu 22.04 o similar | `uname -a` |
+| Docker Engine | 24.0+ con `compose` v2 | `docker --version && docker compose version` |
+| Python (host) | 3.11+ | `python3 --version` |
+| `curl` | cualquier | `curl --version` |
+| `jq` | cualquier | `jq --version` |
+| RAM libre | 8 GB | `free -h` |
+| Disco libre | 10 GB | `df -h ~` |
 
 ### Verificar puertos libres
 
@@ -102,10 +122,7 @@ for p in 3000 7000 8180 9090; do
 done
 ```
 
-Si algún puerto está ocupado:
-
-- Edita `docker-compose.yml` y cambia `HOST_EXTERNO:PUERTO_INTERNO` (ej. `"8280:8080"` para Keycloak).
-- Actualiza las URLs en este documento (paso 2 y siguientes).
+Si algún puerto está ocupado, edita `docker-compose.yml` y cambia el mapeo `"HOST_EXTERNO:PUERTO_INTERNO"`.
 
 ### Instalar `jq`
 
@@ -117,13 +134,6 @@ sudo apt-get update && sudo apt-get install -y jq
 brew install jq
 ```
 
-### (Opcional) Clonar con SSH
-
-```bash
-# Si vas a clonar con SSH en vez de HTTPS, asegúrate de tener la key pública en GitHub
-ssh -T git@github.com
-```
-
 ---
 
 ## 4. Instalación paso a paso
@@ -131,8 +141,8 @@ ssh -T git@github.com
 ### Paso 1 · Clonar el repositorio
 
 ```bash
-git clone https://github.com/victorherherARQ/agent-oauth-poc.git
-cd agent-oauth-poc
+git clone https://github.com/victorherherARQ/desarrollos-hermes.git
+cd desarrollos-hermes/agent-oauth-poc
 ```
 
 Comprobar que estás en la raíz del proyecto:
@@ -143,7 +153,7 @@ ls -F
 #               keycloak/  README.md  scripts/  spring-boot-api/
 ```
 
-### Paso 2 · Arrancar los 5 contenedores
+### Paso 2 · Arrancar los contenedores
 
 ```bash
 docker compose up -d --build
@@ -152,7 +162,7 @@ docker compose up -d --build
 - **Primera ejecución**: ~3 min (descarga imágenes + compilación Maven de Spring Boot).
 - **Siguientes ejecuciones**: ~15-25 s (reutiliza caché de capas y volumen de Postgres).
 
-Verificar que los 5 contenedores están "running":
+Verificar:
 
 ```bash
 docker compose ps
@@ -162,7 +172,7 @@ Salida esperada (5 servicios, columna `State` todos `running` o `Up`):
 
 ```
 NAME                          STATUS
-agent-poc-postgres            Up
+agent-poc-postgres            Up (healthy)
 agent-poc-keycloak            Up
 agent-poc-spring-boot-api     Up
 agent-poc-agent-python        Up
@@ -170,8 +180,6 @@ agent-poc-client-mock         Up
 ```
 
 ### Paso 3 · Esperar a que Keycloak arranque
-
-Keycloak necesita ~45-90 s en arrancar importando el driver JDBC de Postgres y arrancando el broker JPA. Lanza este loop que **reintenta hasta que responda**:
 
 ```bash
 until curl -sf http://localhost:8180/realms/master/.well-known/openid-configuration > /dev/null; do
@@ -187,220 +195,159 @@ Si se eterniza (>2 min), mira los logs:
 docker logs agent-poc-keycloak --tail 30
 ```
 
-### Paso 4 · Crear el realm y todo lo necesario
+### Paso 4 · Crear el realm y todo lo necesario (v2 spec)
+
+**Importante**: en v2, el script NO habilita `directAccessGrantsEnabled` (ROPC) ni CIBA. Habilita PKCE + Device Code.
 
 ```bash
-python3 scripts/create_realm.py --reset
+KEYCLOAK_URL=http://localhost:8180 python3 scripts/create_realm.py --reset
 ```
 
 El `--reset` borra el realm `agent-poc` si existía y lo recrea desde cero. **Es seguro ejecutarlo varias veces**.
 
-Para actualizar sin destruir (modo idempotente, recomendado para cambios triviales):
-
-```bash
-python3 scripts/create_realm.py     # sin --reset
-```
-
-Output esperado (7 pasos ✅):
-
+Output esperado:
 ```
 [1/7] Realm 'agent-poc'
-  ✅ ...
-[2/7] Realm capabilities (CIBA, ...)
-  ✅ ...
-[3/7] Client 'agente-ia'
-  ✅ ...
-[4/7] Client 'spring-boot-api'
-  ✅ ...
-[5/7] Custom scopes (calendar.read, calendar.write, email.send, email.modify)
-  ✅ ...
-[6/7] Audience mapper para API Spring Boot
-  ✅ ...
-[7/7] Usuarios demo (ana, luis, marta)
-  ✅ ...
+  ...
+[2/7] Custom client-scopes (con fix KC 24)
+[3/7] Usuarios demo (ana/luis/marta)
+[4/7] Cliente confidencial 'agente-ia' (A+B+C)
+[4b/7] Cliente confidential 'client-mock' (webapp del usuario)
+[5/7] Asignando custom scopes al cliente agente-ia (sub-endpoint)
+[6/7] Realm default scopes (openid/profile/email)
+[7/7] Verificación end-to-end
+  ✅ agente-ia: standardFlow=true, directAccess=false, device=true
+  ✅ ROPC bloqueado correctamente
 ```
 
-### Paso 5 · Verificación rápida
+### Paso 5 · Reiniciar contenedores con el código nuevo
+
+> ⏸ **Operación manual requerida**
+> Después del primer build y de cualquier cambio de código en `agent-python/` o `client-mock/`, los contenedores deben restart:
+>
+> ```bash
+> docker restart agent-poc-agent-python agent-poc-client-mock
+> ```
+>
+> Esto es necesario para que carguen el código Python/Node nuevo. KC, postgres y Spring Boot NO necesitan restart (sus imágenes están fijadas).
+
+### Paso 6 · Verificación rápida
 
 ```bash
-# Health del agente
+# Health del agente (debería listar los 3 flujos)
 curl -s http://localhost:7000/agente/health | jq .
-# → {"status":"UP"}
+# → {
+#     "status": "UP",
+#     "idp_issuer": "http://keycloak:8080/realms/agent-poc",
+#     "agent_client_id": "agente-ia",
+#     "supported_flows": ["A:auth_code+pkce", "B:device_code", "C:obo"]
+#   }
 
-# Health del Keycloak
+# Health del client-mock
+curl -s http://localhost:3000/healthz | jq .
+# → { "status": "UP", "idp": "...", "is_b2c": false }
+
+# Health de Spring Boot
+curl -s http://localhost:9090/health | jq .
+
+# Health de Keycloak
 curl -s http://localhost:8180/health/ready | jq .
-# → {"status":"UP"}
 
 # Catálogo OIDC del realm recién creado
-curl -s http://localhost:8180/realms/agent-poc/.well-known/openid-configuration | jq '.issuer, .grant_types_supported, .authorization_endpoint'
+curl -s http://localhost:8180/realms/agent-poc/.well-known/openid-configuration | \
+  jq '.issuer, .grant_types_supported, .authorization_endpoint, .device_authorization_endpoint'
 ```
-
-Si los tres responden, **el entorno está completamente operativo**.
 
 ---
 
-## 5. Tests end-to-end (los 5 que pasan)
+## 5. Tests end-to-end — Los 3 flujos
 
-Todos los tests llaman a `POST http://localhost:7000/agente/call` con el mismo payload JSON. El agente:
+### Test A · Auth Code + PKCE (`scope: calendar.read`)
 
-1. Resuelve el `user_id` contra el mapa interno (`agent-python/config.py`) — **no** contra Keycloak.
-2. Pide un `access_token` a Keycloak con `grant_type=password` (ROPC) usando las credenciales del usuario.
-3. Llama al endpoint de la Spring Boot API correspondiente al `scope`.
-4. Devuelve la respuesta del recurso protegido al cliente.
-
-### Test 1 · Ana lee su calendario (`scope: calendar.read`)
+Este test **requiere un browser humano real** (o un flow automatizado tipo Playwright/Puppeteer). En PoC lo más simple es usar la UI web:
 
 ```bash
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"ana","request":"léeme mi calendario","scope":"calendar.read","action_type":"calendar"}' | jq .
+# Paso 1: el cliente pide al agente una authorize URL
+RESP=$(curl -s -X POST http://localhost:7000/agente/auth/authorize \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}')
+echo "$RESP" | jq .
+# {
+#   "authorize_url": "http://localhost:8180/realms/agent-poc/protocol/openid-connect/auth?...",
+#   "code_verifier": "...",
+#   "state": "...",
+#   "redirect_uri": "http://localhost:3000/auth/callback"
+# }
+
+# Paso 2: el HUMANO abre authorize_url en su browser.
+#         KC le presenta la pantalla de login.
+#         Ana mete su usuario + password.
+#         KC redirige a client-mock/callback?code=...&state=...
+#         client-mock intercambia el code por tokens, los guarda.
+
+# Paso 3: una vez completado el flujo, el cliente-mock devuelve
+#         los tokens via /auth/session/<sid>
 ```
 
-**Salida esperada** (Ana tiene 2 eventos):
-
-```json
-{
-  "ok": true,
-  "user": "Ana García",
-  "scope": "calendar.read",
-  "result": {
-    "events": [
-      { "title": "Daily con Vicedo",          "when": "2026-07-08T09:00:00Z" },
-      { "title": "Review PR #482",            "when": "2026-07-08T16:30:00Z" }
-    ]
-  }
-}
-```
-
-### Test 2 · Luis lee su calendario
+**Cómo automatizar completamente** (sin browser del humano, modo headless):
 
 ```bash
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"luis","request":"qué tengo hoy","scope":"calendar.read","action_type":"calendar"}' | jq .
+# Solo viable si ya tienes un user logged-in de una sesión KC previa.
+# Para demo en vivo, usa la UI.
 ```
 
-**Salida esperada** (Luis tiene 1 evento distinto):
-
-```json
-{
-  "ok": true,
-  "user": "Luis Pérez",
-  "scope": "calendar.read",
-  "result": {
-    "events": [
-      { "title": "Standup equipo Hermes",     "when": "2026-07-08T08:30:00Z" }
-    ]
-  }
-}
-```
-
-### Test 3 · Marta lee su calendario
+### Test B · Device Code Flow (headless)
 
 ```bash
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"marta","request":"muestra agenda","scope":"calendar.read","action_type":"calendar"}' | jq .
+# Paso 1: pedir device_code al agente
+RESP=$(curl -s -X POST http://localhost:7000/agente/auth/device \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"ana","scope":"openid profile email calendar.read"}')
+echo "$RESP" | jq .
+# {
+#   "user_code": "ABCD-1234",
+#   "device_code": "...",
+#   "verification_uri": "http://localhost:8180/realms/agent-poc/device",
+#   "verification_uri_complete": "...",
+#   "expires_in": 600,
+#   "interval": 5
+# }
+
+# Paso 2: HUMANO va a http://localhost:8180/realms/agent-poc/device
+#         (o abre la página dedicada /device?user_code=...)
+#         Introduce user_code y aprueba.
+
+# Paso 3: el agente, internamente, recibirá los tokens vía polling.
+#         Para validar, puedes pedir al cliente-mock los tokens
+#         usando /auth/session/<sid> (no aplica en Device Code,
+#         que es por canal backchannel).
 ```
 
-**Salida esperada** (Marta tiene 1 evento):
+### Test C · OBO exchange (refinar scope)
 
-```json
-{
-  "ok": true,
-  "user": "Marta López",
-  "scope": "calendar.read",
-  "result": {
-    "events": [
-      { "title": "Dentista - Dra Suárez",     "when": "2026-07-08T17:00:00Z" }
-    ]
-  }
-}
-```
-
-> **Nota clave**: las tres respuestas son distintas porque cada usuario tiene sus propios eventos en la base de datos mock del Spring Boot. Esto demuestra que el `user_id` viaja en la petición Y se preserva hasta el recurso protegido (no solo el `sub` del JWT sino el `X-User-Id`/claim `user_id`).
-
-### Test 4 · Ana envía un email (`scope: email.send`)
-
-```bash
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"ana","request":"manda un mail al equipo","scope":"email.send","action_type":"Release v0.3 publicada, screenshots adjuntos"}' | jq .
-```
-
-**Salida esperada**:
-
-```json
-{
-  "ok": true,
-  "user": "Ana García",
-  "scope": "email.send",
-  "result": {
-    "sent": true,
-    "to": "ana@example.com",
-    "subject": "Release v0.3 publicada, screenshots adjuntos",
-    "message_id": "msg-<uuid>"
-  }
-}
-```
-
-### Test 5 · Luis envía un email (`scope: email.send`)
-
-```bash
-curl -sX POST http://localhost:7000/agente/call \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"luis","request":"avisa a desarrollo","scope":"email.send","action_type":"Build verde en CI, podemos mergear"}' | jq .
-```
-
-**Salida esperada**:
-
-```json
-{
-  "ok": true,
-  "user": "Luis Pérez",
-  "scope": "email.send",
-  "result": {
-    "sent": true,
-    "to": "luis@example.com",
-    "subject": "Build verde en CI, podemos mergear",
-    "message_id": "msg-<uuid>"
-  }
-}
-```
+> ⚠️ **Limitación KC 24**: Keycloak 24 NO soporta `requested_token_use=on_behalf_of` nativamente. Requiere KC 26+. Mientras tanto, en `app.py:230-310` el agente pide el scope completo en el paso A y verifica si el JWT lo tiene — si no, **en lugar de** hacer OBO (que fallaría), devuelve 400 explicando que el scope no está disponible.
+>
+> En Azure B2C External ID esto funciona nativo.
 
 ### Test negativo · Token sin scope → 401/403
 
-Para verificar que Spring Boot **realmente** valida el `scope` y no solo la firma del JWT, primero conseguimos un token con un scope distinto y luego llamamos al endpoint protegido directamente.
-
 ```bash
-# 1) Conseguir un token SIN scope calendar.read (usando email.send en su lugar)
-# 1.a) Definir el password de Ana (el mismo que usa el agente internamente — ver config.py)
-ANA_PASS=$ANA_PASS  # <-- reemplaza por la contraseña real del usuario 'ana'
+# Conseguir un token SIN scope calendar.read (sólo openid/email/profile)
+TOKEN=$(curl -s -X POST http://localhost:8180/realms/agent-poc/protocol/openid-connect/token \
+  -d 'grant_type=password' \
+  -d 'client_id=agente-ia' \
+  -d 'client_secret=secret-del-agente' \
+  -d 'username=ana' \
+  -d 'password=demo1234' \
+  -d 'scope=openid' | jq -r .access_token)
 
-# 1.b) Conseguir un token SIN scope calendar.read (usando email.send en su lugar)
-TOK=$(curl -sX POST http://localhost:8180/realms/agent-poc/protocol/openid-connect/token \
-    -d 'grant_type=password' \
-    -d 'client_id=agente-ia' \
-    -d 'client_secret=secret-del-agente' \
-    -d 'username=ana' \
-    -d "password=$ANA_PASS" \
-    -d 'scope=email.send' \
-  | jq -r .access_token)
-
-# 2) Llamar a /api/calendar/events con ese token → debe fallar (401 o 403)
+# Llamar a /api/calendar/events con ese token → debe fallar
 curl -i "http://localhost:9090/api/calendar/events?user_id=ana" \
-     -H "Authorization: Bearer $TOK"
+     -H "Authorization: Bearer *** | head -n 1
+# Esperado: HTTP/1.1 401 (o 403 según config de Spring Security)
 ```
 
-**Salida esperada**:
-
-```
-HTTP/1.1 403       ← Preferred (Forbidden por scope insuficiente)
-o bien
-HTTP/1.1 401       ← Spring Security 6.x por defecto (sin WWW-Authenticate)
-```
-
-> ⚠️ Si el código de estado es `403` estás ante el comportamiento Spring Security "estándar". Si es `401`, ver *Troubleshooting §8*.
+> **Nota**: este test usa ROPC password grant solo para **validar la API de Spring**, no como flujo del agente. Es legítimo en un test negativo, porque el agente real NUNCA usa ROPC.
 
 ---
 
@@ -412,7 +359,7 @@ HTTP/1.1 401       ← Spring Security 6.x por defecto (sin WWW-Authenticate)
 docker logs agent-poc-keycloak          # Keycloak 24 (Quarkus)
 docker logs agent-poc-spring-boot-api    # API Spring Boot
 docker logs agent-poc-agent-python       # Agente IA (FastAPI)
-docker logs agent-poc-client-mock        # UI móvil mock (Node 20)
+docker logs agent-poc-client-mock        # Webapp (Node 18)
 docker logs agent-poc-postgres           # Postgres 16
 ```
 
@@ -422,11 +369,11 @@ docker logs agent-poc-postgres           # Postgres 16
 docker compose logs -f --tail 50
 ```
 
-Para ver los logs de un solo servicio en streaming:
+Streaming por servicio:
 
 ```bash
-docker compose logs -f spring-boot-api
 docker compose logs -f agent-python
+docker compose logs -f client-mock
 ```
 
 ### Entrar en un contenedor
@@ -441,14 +388,14 @@ docker exec -it agent-poc-postgres psql -U keycloak -d keycloak
 ### Filtros útiles
 
 ```bash
-# Solo ERROR / WARN
-docker logs agent-poc-keycloak 2>&1 | grep -iE "error|warn|exception"
-
 # Solo requests HTTP del agente
 docker logs agent-poc-agent-python 2>&1 | grep -E "POST|GET"
 
-# requests HTTP de Spring Boot
-docker logs agent-poc-spring-boot-api 2>&1 | grep -E "INFO.*RequestMapping"
+# Solo los flujos OAuth por letra
+docker logs agent-poc-agent-python 2>&1 | grep -E "\[A\]|\[B\]|\[C\]"
+
+# Errores en cualquier servicio
+docker compose logs 2>&1 | grep -iE "error|warn|exception"
 ```
 
 ---
@@ -467,7 +414,7 @@ docker compose down
 docker compose down -v
 ```
 
-> Usar cuando el realm está corrupto, los `CUSTOM_SCOPES` cambiaron, o el contenedor Postgres da errores raros.
+> Usar cuando el realm está corrupto o los `CUSTOM_SCOPES` cambiaron.
 
 ### Reconstruir un solo servicio
 
@@ -478,237 +425,92 @@ docker compose up -d spring-boot-api
 
 Misma forma con `agent-python`, `keycloak`, `client-mock`.
 
+### Restart tras cambio de código
+
+```bash
+# Después de modificar agent-python/ o client-mock/
+docker restart agent-poc-agent-python agent-poc-client-mock
+```
+
 ### Reiniciar Keycloak sin perder datos
 
 ```bash
-docker compose restart keycloak
-```
-
-Y luego re-esperar a que responda:
-
-```bash
+docker restart agent-poc-keycloak
+# Esperar a que esté ready:
 until curl -sf http://localhost:8180/realms/master/.well-known/openid-configuration > /dev/null; do sleep 3; done
 echo "ready"
+# Re-aplicar spec del realm (idempotente):
+KEYCLOAK_URL=http://localhost:8180 python3 scripts/create_realm.py
 ```
 
 ### Borrar y recrear solo el realm (sin tocar contenedores)
 
 ```bash
-python3 scripts/create_realm.py --reset
-```
-
-### Obtener un token de admin de Keycloak desde el host
-
-```bash
-# 1) Conseguir token de admin (admin/admin es la cuenta admin del realm 'master')
-ADMIN_TOK=$(curl -sX POST http://localhost:8180/realms/master/protocol/openid-connect/token \
-    -d 'grant_type=password' \
-    -d 'client_id=admin-cli' \
-    -d 'username=admin' \
-    -d 'password=admin' | jq -r .access_token)
-
-# 2) Inspeccionar realms
-curl -sH "Authorization: Bearer $ADMIN_TOK" \
-     http://localhost:8180/admin/realms | jq '.[].realm'
-
-# 3) Inspeccionar usuarios del realm agent-poc
-curl -sH "Authorization: Bearer $ADMIN_TOK" \
-     http://localhost:8180/admin/realms/agent-poc/users | jq '[.[] | {username, email}]'
-```
-
-### Inspeccionar un JWT (sin librerías)
-
-```bash
-# Reusa $TOK del bloque anterior (admin) o del bloque del Test negativo (ana)
-echo "$ADMIN_TOK" | cut -d'.' -f2 | base64 -d 2>/dev/null | jq .
-# → header y payload del access_token (claims: scope, aud, sub, ...)
+KEYCLOAK_URL=http://localhost:8180 python3 scripts/create_realm.py --reset
 ```
 
 ---
 
-## 8. Troubleshooting (5 problemas típicos con solución)
+## 8. Troubleshooting (problemas comunes y soluciones)
 
-### 8.1 · "Puerto 8180 ocupado" (y similares)
+### El agente devuelve `invalid_scope`
 
-**Síntoma**: `Error response from daemon: Ports are not available: ...`
+Síntoma: pedir `calendar.read` o `email.send` da `400 invalid_scope`.
 
-**Causa**: otro proceso (structurizr, otro Keycloak, etc.) ocupa el puerto del host.
+Causa: los custom scopes no están asignados al cliente `agente-ia`.
 
-**Solución**: editar `docker-compose.yml` y cambiar solo la parte izquierda (host) de `HOST:CONT`:
+Solución:
+
+```bash
+KEYCLOAK_URL=http://localhost:8180 python3 scripts/create_realm.py
+```
+
+El script re-asigna automáticamente vía sub-endpoint dedicado.
+
+Ver detalle en [POOL.md §5](../../docs/POOL.md).
+
+### 401/403 inesperados en Spring Boot
+
+Causa: el `scope` en el JWT no coincide con el del `@PreAuthorize`.
+
+Diagnóstico: decodificar el JWT en [jwt.io](https://jwt.io).
+
+### Cliente-mock no recibe el callback
+
+Causa: navegador bloquea el redirect por CORS / third-party cookies.
+
+Solución: usar la UI en `http://localhost:3000/` (mismo origen) o deshabilitar bloqueador.
+
+### Device Code no llega al `verification_uri`
+
+Causa: el navegador del humano va a `http://localhost:8180/realms/agent-poc/device` que SOLO existe si KC está arrancado. Usar la UI dedicada `/device?user_code=...` que sí es accesible.
+
+---
+
+## 9. Cómo migrar de Keycloak a Azure B2C
 
 ```yaml
-# antes
-- "8180:8080"      # Keycloak
-- "9090:9090"      # Spring Boot
-- "7000:7000"      # Agente
-
-# después (ejemplo)
-- "8280:8080"
-- "9190:9090"
-- "7100:7000"
+# override de docker-compose (o vía .env)
+services:
+  agent-python:
+    environment:
+      IDP_ISSUER: https://<tenant>.ciamlogin.com/<tenant_id>.onmicrosoft.com
+      AGENT_CLIENT_ID: <app-registration-id-de-B2C>
+      AGENT_CLIENT_SECRET: <secret-de-B2C>
+  client-mock:
+    environment:
+      IDP_ISSUER: https://<tenant>.ciamlogin.com/<tenant_id>.onmicrosoft.com
+      AGENT_CLIENT_ID: <app-registration-id-de-B2C>
+      AGENT_CLIENT_SECRET: <secret-de-B2C>
+      B2C_USER_FLOW: signup_signin_v1
 ```
 
-Luego **actualizar todos los comandos de este documento** que usan los puertos cambiados.
+**Sin tocar código**: `agent-python/config.py:25-40` detecta B2C automáticamente.
 
-### 8.2 · "Keycloak no responde tras 60-90 s"
-
-**Síntoma**: el loop del paso 3 nunca termina.
-
-**Diagnóstico**:
-
-```bash
-docker logs agent-poc-keycloak --tail 50
-```
-
-- Si ves `Failed to determine a suitable driver class` o `Connection refused: postgres:5432` → el contenedor `postgres` aún no está listo (raro, el `depends_on: healthy` debería cubrirlo, pero pasa si la máquina está muy cargada). Esperar más.
-- Si ves `ERROR: invalid username/password` repetido → bumpear memoria. Solución: `docker compose down -v && docker compose up -d --build`.
-- Si no ves **nada** útil: `docker compose logs keycloak | head -100`.
-
-**Solución nuclear** (desde cero, perdiendo la DB de Keycloak):
-
-```bash
-docker compose down -v
-docker compose up -d --build
-```
-
-### 8.3 · "invalid_scope al pedir calendar.read"
-
-**Síntoma**: `{"ok": false, "error": "...invalid_scope..."}` en respuesta del agente.
-
-**Causa documentada**: bug conocido en Keycloak 24 — al crear un custom scope, `include.in.token.scope` debe ir en la **forma dotted canónica** (`include.in.token.scope=true`), no en camelCase. El script `create_realm.py` ya lo aplica correctamente. Si reaparece, casi siempre significa que el realm se modificó a mano por la consola admin y se "ensució".
-
-**Solución**:
-
-```bash
-python3 scripts/create_realm.py --reset
-```
-
-Si persiste tras el reset, ver `docs/POOL.md §5` para el diagnóstico paso a paso.
-
-### 8.4 · "Spring da 401 en lugar de 403"
-
-**Síntoma**: el *Test negativo* (§5) devuelve `HTTP/1.1 401` en vez de `403`.
-
-**Explicación**: es **comportamiento estándar** de Spring Security 6.x cuando no hay un `AuthenticationEntryPoint` configurado que añada `WWW-Authenticate`. Ver [Spring Security #13543](https://github.com/spring-projects/spring-security/issues/13543).
-
-**No es un bug**, pero si necesitas `403` siempre:
-
-```java
-// spring-boot-api/src/main/java/.../SecurityConfig.java
-http.exceptionHandling(eh -> eh
-    .authenticationEntryPoint((req, res, ex) ->
-        res.setStatus(HttpServletResponse.SC_UNAUTHORIZED))
-    .accessDeniedHandler((req, res, ex) ->
-        res.setStatus(HttpServletResponse.SC_FORBIDDEN)));
-```
-
-### 8.5 · "El agente no encuentra el usuario"
-
-**Síntoma**: `{"ok": false, "error": "user_id 'pepe' no encontrado en el mapa local"}`.
-
-**Causa**: solo `ana`, `luis` y `marta` están registrados en `agent-python/config.py`. La PoC no consulta el directorio de Keycloak.
-
-**Solución A · usar uno existente**:
-
-```bash
-# cambiar 'pepe' por uno de:
-#   ana / luis / marta
-```
-
-**Solución B · añadir un cuarto usuario** (ver §9).
+Para el `KEYCLOAK_URL` (en el script de bootstrap del realm), en B2C se reemplaza por lógica diferente — ver `ESTUDIO_AZURE_B2C.md §6` y `§7`.
 
 ---
 
-## 9. Cómo personalizar / extender
-
-### Añadir un nuevo scope custom
-
-1. Editar `scripts/create_realm.py` línea ~37 (`CUSTOM_SCOPES`):
-   ```python
-   CUSTOM_SCOPES = ["calendar.read", "calendar.write", "email.send", "email.modify", "drive.read"]
-   ```
-2. Añadir la rama de dispatch en `agent-python/app.py` línea ~110:
-   ```python
-   elif req.scope == "drive.read":
-       r = httpx.get(f"{API_BASE_URL}/api/drive/files", headers=headers, params={"user_id": user_id})
-   ```
-3. Añadir el endpoint en Spring Boot (`spring-boot-api/.../DriveController.java`).
-4. Reaplicar el realm:
-   ```bash
-   python3 scripts/create_realm.py --reset
-   docker compose build spring-boot-api agent-python
-   docker compose up -d spring-boot-api agent-python
-   ```
-
-### Cambiar la contraseña de un usuario
-
-**Opción A** (recomendada): re-ejecutar el script con `--reset`:
-
-```bash
-# editar DEMO_USERS en scripts/create_realm.py (incluye nuevo password)
-python3 scripts/create_realm.py --reset
-```
-
-**Opción B** (cambiar en runtime, sin reset):
-
-```bash
-ADMIN_TOK=$ADMIN_TOK ... # ver §7
-curl -sX PUT http://localhost:8180/admin/realms/agent-poc/users/<user-uuid>/reset-password \
-  -H "Authorization: Bearer $ADMIN_TOK" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"password","value":"nueva-pass","temporary":false}'
-```
-
-Y **además** actualizar `agent-python/config.py` y reconstruir el contenedor del agente.
-
-### Cambiar el puerto del agente (7000 → otro)
-
-Hay que tocar **tres sitios**:
-
-```bash
-# 1) agent-python/Dockerfile        → EXPOSE 8000
-# 2) docker-compose.yml              → "8000:8000"
-# 3) scripts/create_realm.py         → AGENT_CLIENT_SECRET (no cambia)
-```
-
-Después:
-
-```bash
-docker compose build agent-python
-docker compose up -d agent-python
-```
-
-### Apuntar el agente a otra API (`API_BASE_URL`)
-
-```bash
-# agent-python/config.py
-API_BASE_URL = "http://mi-api-prod:8080"
-
-docker compose build agent-python
-docker compose up -d agent-python
-```
-
-> Cuidado: la nueva API debe validar `iss == http://<keycloak-host>/realms/agent-poc` o Spring Boot rechazará el token.
-
----
-
-## 10. Referencias
-
-| Documento                                                         | Para qué sirve                                              |
-|-------------------------------------------------------------------|-------------------------------------------------------------|
-| [`README.md`](../README.md)                                       | Visión general del proyecto (qué, por qué, cómo).            |
-| [`INSTRUCCIONES.md`](../INSTRUCCIONES.md)                         | Brief original de la PoC, objetivos de negocio.             |
-| [`docs/POOL.md`](./POOL.md)                                       | Decisiones técnicas, bugs conocidos y workarounds (incluye el §5 sobre `invalid_scope`). |
-| [`docs/ESTUDIO_COMPARATIVO.md`](./ESTUDIO_COMPARATIVO.md)         | Trade-offs ROPC vs CC vs CIBA, OAuth client-credentials vs token-exchange. |
-| Keycloak 24 docs · https://www.keycloak.org/docs/24.0.5/          | Manual de Keycloak (admin REST, clients, scopes, CIBA).     |
-| RFC 6749 · https://www.rfc-editor.org/rfc/rfc6749                 | OAuth 2.0 Framework (roles, grants, flows).                 |
-| RFC 7523 · https://www.rfc-editor.org/rfc/rfc7523                 | JWT Bearer Client Authentication.                            |
-| RFC 8693 · https://www.rfc-editor.org/rfc/rfc8693                 | OAuth 2.0 Token Exchange (lo que NO usamos en esta PoC).     |
-| OIDC Core · https://openid.net/specs/openid-connect-core-1_0.html | OpenID Connect Core (claims, ID token, UserInfo).            |
-| OIDC CIBA · https://openid.net/specs/openid-connect-ciba-1_0.html | Client Initiated Backchannel Authentication (la pieza clave habilitada con `-Dkeycloak.profile.feature.ciba=enabled`). |
-
----
-
-<p align="center">
-  <sub>Victor H. · 2026 · Documento vivo · PRs bienvenidos a <code>docs/SETUP.md</code></sub>
-</p>
+**Mantenedor**: Víctor (khum1982) + Hermes Agent.
+**Stack PIN**: `keycloak:24.0.5`, `spring-boot:3.2.5`, `java:17`, `python:3.11`, `node:18`, `postgres:16`.
+**Para B2C**: `azure-entra-external-id` (ciamlogin.com).

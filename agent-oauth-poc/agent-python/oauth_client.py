@@ -1,280 +1,339 @@
 """
-Cliente OAuth/OIDC del agente.
+Cliente OAuth/OIDC del agente — Versión "A+B+C portable".
 
-Implementa dos flujos de delegación:
+Implementa TRES flujos de delegación, todos sin que el humano comparta password
+con el agente:
 
-  1. JWT Bearer (RFC 7521 / 7523)
-     Para scopes rutinarios ya pre-aprobados por el usuario (p.ej. calendar.read).
-     El agente intercambia una *assertion* (JWT firmado con el client_secret del
-     agente que lleva `sub=<user_id>`) por un access_token "actuando en nombre de"
-     ese usuario.
+  A) Authorization Code + PKCE (RFC 6749 + RFC 7636)
+     El humano se autentica en `client-mock` (webapp) usando Auth Code + PKCE
+     contra el IdP. client-mock recibe el `access_token` + `refresh_token` y
+     los entrega al agente (vía canal seguro: API interna en la PoC, en
+     producción sería deep link / clipboard firmado / etc.).
 
-  2. CIBA -- Client Initiated Backchannel Authentication (OpenID Connect CIBA)
-     Para scopes sensibles (p.ej. email.send). El agente dispara un ping al
-     dispositivo del usuario (vía Keycloak + cliente mock de CIBA) y solo recibe
-     el access_token tras la aprobación/consentimiento del usuario fuera de banda.
+  C) On-Behalf-Of / JWT Bearer (RFC 7523)
+     El agente intercambia el `user_access_token` recibido de client-mock
+     por un nuevo access_token delegado con el scope específico.
+     Funciona idéntico en Keycloak 26+ y Azure B2C External ID.
 
-El agente actúa como cliente OAuth *confidential*: se autentica ante Keycloak
-con `client_id` + `client_secret` y firma las assertions con HS256 usando el
-mismo client_secret como clave compartida (caso "client_secret JWT", perfil
-de `private_key_jwt` definido en OIDC Core §9).
+  B) Device Code Flow (RFC 8628)
+     Fallback para escenarios headless. El agente pide un `device_code` al IdP,
+     imprime el `user_code` + URL. El humano va a su dispositivo, introduce el
+     código y aprueba. El agente hace polling al token endpoint.
+
+El agente actúa como cliente OAuth *confidential* (client_id + client_secret)
+o *public* (con PKCE), según el flujo.
+
+Referencia: docs/ESTUDIO_AZURE_B2C.md §14 (replanteamiento de flujos).
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import json
 import logging
+import os
 import time
+import uuid
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
-import jwt  # PyJWT -- usamos HS256 con client_secret
 
 from config import (
     AGENT_CLIENT_ID,
     AGENT_CLIENT_SECRET,
-    KEYCLOAK_CIBA_AUTH_ENDPOINT,
-    KEYCLOAK_ISSUER,
-    KEYCLOAK_TOKEN_ENDPOINT,
-    USERS,
+    DEVICE_AUTHORIZATION_ENDPOINT,
+    IDP_AUTHORIZE_ENDPOINT,
+    IDP_ISSUER,
+    IDP_TOKEN_ENDPOINT,
+    IDP_USERINFO_ENDPOINT,
 )
 
 logger = logging.getLogger("agent.oauth")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers PKCE (RFC 7636)
+# ─────────────────────────────────────────────────────────────────────────────
+def _b64url_nopad(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+
+def make_pkce_pair() -> tuple[str, str]:
+    """
+    Genera un par (code_verifier, code_challenge) para PKCE (RFC 7636 §4).
+
+    code_verifier:  43-128 chars random [A-Z][a-z][0-9]-._~
+    code_challenge: BASE64URL(SHA256(code_verifier))
+    """
+    verifier = _b64url_nopad(os.urandom(32))
+    challenge = _b64url_nopad(hashlib.sha256(verifier.encode("ascii")).digest())
+    return verifier, challenge
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OAuthClient
+# ─────────────────────────────────────────────────────────────────────────────
 class OAuthClient:
-    """Encapsula los flujos OAuth/OIDC que el agente necesita."""
+    """Encapsula los tres flujos OAuth/OIDC: A (Auth Code + PKCE), B (Device), C (OBO)."""
 
-    # ------------------------------------------------------------------ #
-    # Assertions                                                         #
-    # ------------------------------------------------------------------ #
-    def user_assertion_for(self, user_id: str) -> str:
-        """
-        Crea una *user assertion* (JWT firmado con client_secret, HS256).
-
-        Payload según RFC 7523 §3 + OIDC Core §9:
-            sub = user_id          -> sobre QUIÉN se solicita el token (delegación)
-            iss = agent_client_id  -> quién firma (el agente)
-            aud = keycloak_token_endpoint -> a quién va dirigida
-            exp = now + 300        -> válida 5 minutos
-        """
-        now = int(time.time())
-        payload = {
-            "sub": user_id,
-            "iss": AGENT_CLIENT_ID,
-            "aud": KEYCLOAK_TOKEN_ENDPOINT,
-            "iat": now,
-            "exp": now + 300,
-        }
-        assertion = jwt.encode(
-            payload,
-            AGENT_CLIENT_SECRET,
-            algorithm="HS256",
-        )
-        logger.debug(
-            "user_assertion creada: sub=%s iss=%s aud=%s exp=%d",
-            user_id, AGENT_CLIENT_ID, KEYCLOAK_TOKEN_ENDPOINT, payload["exp"],
-        )
-        return assertion
-
-    def login_hint_token_for(self, user_id: str, scope: str) -> str:
-        """
-        Crea un *login_hint_token* para CIBA (OIDC CIBA §5.1).
-
-        Keycloak lo usa para:
-          - saber a qué usuario notificar (`sub`)
-          - mostrar contexto al usuario en el cliente CIBA (`scope`)
-        """
-        now = int(time.time())
-        payload = {
-            "sub": user_id,
-            "scope": scope,
-            "iss": AGENT_CLIENT_ID,
-            "aud": KEYCLOAK_ISSUER,
-            "iat": now,
-            "exp": now + 300,
-        }
-        return jwt.encode(payload, AGENT_CLIENT_SECRET, algorithm="HS256")
-
-    # ------------------------------------------------------------------ #
-    # Flujo 1: On-Behalf-Of via Resource Owner Password Credentials        #
-    # ------------------------------------------------------------------ #
-    # En Keycloak 24 el grant RFC 7523 (jwt-bearer) NO está habilitado por
-    # defecto. La forma pragmática de PoC es ROPC + claim `act` para que el
-    # JWT refleje "Ana autoriza al agente-ia a actuar en su nombre" (perfil
-    # on-behalf-of OAuth 2.0). En producción se sustituye por private_key_jwt
-    # + RFC 7523 + DPoP cuando se cambie a Keycloak 26+ o Auth0.
-    # ------------------------------------------------------------------ #
-    async def jwt_bearer_flow(self, user_id: str, scope: str) -> dict[str, Any]:
-        """
-        Autentica al usuario y solicita token con scope lógico.
-
-        Flujo: Resource Owner Password Credentials (ROPC).
-          - grant_type=password
-          - username/password del usuario
-          - cliente agente-ia confidencial (client_id + client_secret)
-          - scope solicitado (calendar.read, email.send, ...)
-
-        Devuelve el access_token listo para enviar a la API Spring Boot.
-        """
-        logger.info(
-            "[OBO] user=%s scope=%s", user_id, scope,
-        )
-        users = USERS
-        if user_id not in users:
-            raise ValueError(f"Usuario desconocido: {user_id}")
-        user = users[user_id]
-
-        data = {
-            "grant_type": "password",
-            "client_id": AGENT_CLIENT_ID,
-            "client_secret": AGENT_CLIENT_SECRET,
-            "username": user["username"],
-            "password": user["password"],
-            "scope": scope,
-        }
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(KEYCLOAK_TOKEN_ENDPOINT, data=data)
-            logger.debug(
-                "[OBO] POST %s -> HTTP %d body=%s",
-                KEYCLOAK_TOKEN_ENDPOINT, resp.status_code, resp.text[:200],
-            )
-            if resp.status_code >= 400:
-                logger.error("[OBO] Error: %s", resp.text[:300])
-            resp.raise_for_status()
-            token = resp.json()
-
-        logger.info(
-            "[OBO] Token OK: expires_in=%s scope=%s sub=%s",
-            token.get("expires_in"),
-            token.get("scope"),
-            user["username"],
-        )
-        return token
-
-    # ------------------------------------------------------------------ #
-    # Flujo 2: CIBA (aprobación fuera de banda)                          #
-    # ------------------------------------------------------------------ #
-    async def ciba_flow(
+    # ----------------------------------------------------------------- #
+    # FLUJO A: Authorization Code + PKCE (lado del agente)              #
+    # ----------------------------------------------------------------- #
+    # El cliente-mock hace el dance del Auth Code (es el "cliente público"
+    # que el humano usa para autenticarse). El agente solo GENERA el PKCE
+    # pair y se lo entrega a client-mock para que lo use en el redirect.
+    # Tras el callback, el agente (con su client_id/secret) intercambia
+    # el `code` por tokens.
+    # ----------------------------------------------------------------- #
+    def build_authorize_url(
         self,
-        user_id: str,
         scope: str,
-        request_text: str,
-        poll_timeout: int = 120,
+        state: str | None = None,
+        acr_values: str | None = None,
+    ) -> dict[str, str]:
+        """
+        Construye la URL de authorize + PKCE pair + state.
+
+        Devuelve:
+          {
+            "authorize_url":  "https://idp/...?...",
+            "code_verifier":  "<verifier>",   # el agente lo guarda
+            "state":          "<state>",      # CSRF token
+          }
+        El cliente-mock debe:
+          1. Redirigir al browser del humano a authorize_url
+          2. Cuando vuelva con ?code=...&state=... llamar a
+             oauth.exchange_code_for_tokens(code, code_verifier)
+        """
+        verifier, challenge = make_pkce_pair()
+        state = state or _b64url_nopad(os.urandom(16))
+
+        params = {
+            "response_type": "code",
+            "client_id": AGENT_CLIENT_ID,
+            "scope": scope,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            # Redirect URI donde client-mock recibe el code
+            "redirect_uri": os.getenv(
+                "CLIENT_MOCK_REDIRECT_URI",
+                "http://localhost:3000/callback",
+            ),
+        }
+        if acr_values:
+            params["acr_values"] = acr_values
+
+        url = f"{IDP_AUTHORIZE_ENDPOINT}?{urlencode(params)}"
+        logger.info(
+            "[A] authorize_url construido: scope=%s acr_values=%s state=%s",
+            scope, acr_values, state,
+        )
+        return {
+            "authorize_url": url,
+            "code_verifier": verifier,
+            "state": state,
+        }
+
+    async def exchange_code_for_tokens(
+        self,
+        code: str,
+        code_verifier: str,
     ) -> dict[str, Any]:
         """
-        OIDC Client Initiated Backchannel Authentication.
+        Intercambia el `code` (recibido por client-mock) por tokens.
+        Este paso es donde el agente prueba su identidad con client_secret.
 
-        Pasos:
-          1. POST /ext/ciba/auth con login_hint_token + scope  -> auth_req_id
-          2. Poll POST /token con grant_type=ciba + auth_req_id hasta que
-             el usuario apruebe (200) o expire (4xx con error=access_denied /
-             expired_token).
+        Devuelve: {access_token, refresh_token, id_token, expires_in, scope, ...}
+        """
+        logger.info("[A] Intercambiando code por tokens...")
+        data = {
+            "grant_type": "authorization_code",
+            "client_id": AGENT_CLIENT_ID,
+            "client_secret": AGENT_CLIENT_SECRET,
+            "code": code,
+            "code_verifier": code_verifier,
+            "redirect_uri": os.getenv(
+                "CLIENT_MOCK_REDIRECT_URI",
+                "http://localhost:3000/callback",
+            ),
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(IDP_TOKEN_ENDPOINT, data=data)
+            logger.debug(
+                "[A] POST %s -> HTTP %d body=%s",
+                IDP_TOKEN_ENDPOINT, resp.status_code, resp.text[:200],
+            )
+            if resp.status_code >= 400:
+                logger.error("[A] Error: %s", resp.text[:300])
+            resp.raise_for_status()
+            return resp.json()
+
+    async def refresh_user_token(
+        self,
+        refresh_token: str,
+        scope: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Renueva el access_token del humano usando su refresh_token.
+        Importante: en muchos IdPs (incluido Keycloak 24) el refresh_token
+        rota con cada uso. El cliente-mock debe actualizarlo tras cada call.
+        """
+        data = {
+            "grant_type": "refresh_token",
+            "client_id": AGENT_CLIENT_ID,
+            "client_secret": AGENT_CLIENT_SECRET,
+            "refresh_token": refresh_token,
+        }
+        if scope:
+            data["scope"] = scope
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(IDP_TOKEN_ENDPOINT, data=data)
+            if resp.status_code >= 400:
+                logger.error("[A] refresh error: %s", resp.text[:300])
+            resp.raise_for_status()
+            return resp.json()
+
+    # ----------------------------------------------------------------- #
+    # FLUJO C: On-Behalf-Of (RFC 7523 / JWT Bearer)                    #
+    # ----------------------------------------------------------------- #
+    # El agente canjea el access_token del humano por un access_token
+    # delegado con el scope específico.
+    # ----------------------------------------------------------------- #
+    async def obo_exchange(
+        self,
+        user_access_token: str,
+        requested_scope: str,
+    ) -> dict[str, Any]:
+        """
+        On-Behalf-Of: canjea un user_access_token por un token delegado.
+
+        El scope del token delegado se limita a `requested_scope` (no el
+        scope completo del user_token). Esto implementa el principio de
+        menor privilegio.
+
+        Devuelve: {access_token, expires_in, scope, token_type}
         """
         logger.info(
-            "[CIBA] Iniciando flujo para user=%s scope=%s request=%r",
-            user_id, scope, request_text,
+            "[C/OBO] user_token=<elided> scope=%s",
+            requested_scope,
         )
+        data = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "client_id": AGENT_CLIENT_ID,
+            "client_secret": AGENT_CLIENT_SECRET,
+            "assertion": user_access_token,
+            "scope": requested_scope,
+            "requested_token_use": "on_behalf_of",
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(IDP_TOKEN_ENDPOINT, data=data)
+            logger.debug(
+                "[C/OBO] POST %s -> HTTP %d body=%s",
+                IDP_TOKEN_ENDPOINT, resp.status_code, resp.text[:200],
+            )
+            if resp.status_code >= 400:
+                logger.error("[C/OBO] Error: %s", resp.text[:300])
+            resp.raise_for_status()
+            return resp.json()
 
-        login_hint_token = self.login_hint_token_for(user_id, scope)
-
-        # bind_token vincula la request CIBA con la sesión del cliente CIBA.
-        # En este PoC coincide con el login_hint_token (caso simple: 1 cliente
-        # CIBA por usuario). En producción sería un token distinto emitido por
-        # el dispositivo del usuario.
-        bind_token = login_hint_token
-
-        auth_payload = {
+    # ----------------------------------------------------------------- #
+    # FLUJO B: Device Code Flow (RFC 8628)                             #
+    # ----------------------------------------------------------------- #
+    # Para agentes headless: el agente imprime un código + URL, el humano
+    # va a su dispositivo, introduce el código y aprueba. Mientras tanto
+    # el agente hace polling.
+    # ----------------------------------------------------------------- #
+    async def device_authorize(self, scope: str) -> dict[str, Any]:
+        """
+        Paso 1: pide un device_code al IdP.
+        Devuelve: {
+          device_code, user_code, verification_uri, verification_uri_complete,
+          expires_in, interval
+        }
+        """
+        logger.info("[B/Device] Solicitando device_code para scope=%s", scope)
+        data = {
             "client_id": AGENT_CLIENT_ID,
             "client_secret": AGENT_CLIENT_SECRET,
             "scope": scope,
-            "login_hint_token": login_hint_token,
-            "bind_token": bind_token,
-            "acr_values": "2",
         }
-
         async with httpx.AsyncClient(timeout=10.0) as client:
-            logger.info("[CIBA] Paso 1/2: POST %s", KEYCLOAK_CIBA_AUTH_ENDPOINT)
-            auth_resp = await client.post(
-                KEYCLOAK_CIBA_AUTH_ENDPOINT, data=auth_payload,
-            )
-            logger.debug("[CIBA] auth response HTTP %d", auth_resp.status_code)
-            if auth_resp.status_code not in (200, 201):
-                logger.error(
-                    "[CIBA] Error en /auth: %s %s",
-                    auth_resp.status_code, auth_resp.text,
-                )
-                auth_resp.raise_for_status()
+            resp = await client.post(DEVICE_AUTHORIZATION_ENDPOINT, data=data)
+            if resp.status_code >= 400:
+                logger.error("[B/Device] /device auth error: %s", resp.text[:300])
+            resp.raise_for_status()
+            return resp.json()
 
-            auth = auth_resp.json()
-            auth_req_id = auth["auth_req_id"]
-            expires_in = int(auth.get("expires_in", 120))
-            interval = int(auth.get("interval", 5))
-            logger.info(
-                "[CIBA] auth_req_id=%s expires_in=%ds interval=%ds",
-                auth_req_id, expires_in, interval,
-            )
+    async def device_poll_for_tokens(
+        self,
+        device_code: str,
+        interval: int = 5,
+        expires_in: int = 600,
+    ) -> dict[str, Any]:
+        """
+        Paso 2: polling al token endpoint con el device_code hasta que el
+        humano apruebe o expire.
 
-            # Paso 2: polling hasta aprobación o expiración.
-            logger.info(
-                "[CIBA] Paso 2/2: polling /token cada %ds (max %ds)",
-                interval, poll_timeout,
-            )
-            token_payload = {
-                "grant_type": "urn:openid:params:grant-type:ciba",
-                "auth_req_id": auth_req_id,
-                "client_id": AGENT_CLIENT_ID,
-                "client_secret": AGENT_CLIENT_SECRET,
-            }
-
-            elapsed = 0
-            while elapsed < min(expires_in, poll_timeout):
+        Devuelve: {access_token, refresh_token, ...} cuando el humano aprueba.
+        Lanza TimeoutError si expira sin aprobación.
+        """
+        data = {
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            "client_id": AGENT_CLIENT_ID,
+            "client_secret": AGENT_CLIENT_SECRET,
+            "device_code": device_code,
+        }
+        elapsed = 0
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            while elapsed < expires_in:
                 await asyncio.sleep(interval)
                 elapsed += interval
-                logger.debug(
-                    "[CIBA] poll t+%ds -> POST /token", elapsed,
-                )
-                token_resp = await client.post(
-                    KEYCLOAK_TOKEN_ENDPOINT, data=token_payload,
-                )
+                logger.debug("[B/Device] poll t+%ds", elapsed)
+                resp = await client.post(IDP_TOKEN_ENDPOINT, data=data)
 
-                # 200 -> aprobado
-                if token_resp.status_code == 200:
-                    token = token_resp.json()
+                if resp.status_code == 200:
+                    token = resp.json()
                     logger.info(
-                        "[CIBA] ¡Aprobado! access_token obtenido "
-                        "(expires_in=%s, scope=%s)",
-                        token.get("expires_in"), token.get("scope"),
+                        "[B/Device] ¡Aprobado! access_token=%s",
+                        "<elided>",
                     )
                     return token
 
-                # 400 con authorization_pending -> seguir esperando
                 body = {}
                 try:
-                    body = token_resp.json()
+                    body = resp.json()
                 except ValueError:
                     pass
-                err = body.get("error")
+                err = body.get("error", "")
                 if err == "authorization_pending":
-                    logger.debug("[CIBA] status=authorization_pending, sigo esperando")
+                    continue
+                if err == "slow_down":
+                    interval += 5
                     continue
                 if err in ("expired_token", "access_denied"):
-                    logger.error(
-                        "[CIBA] Error terminal del flujo: %s -- %s",
-                        err, body.get("error_description"),
-                    )
-                    token_resp.raise_for_status()
-
-                # Otro 4xx -> error inesperado
+                    logger.error("[B/Device] Error terminal: %s", err)
+                    resp.raise_for_status()
+                # Otro error inesperado
                 logger.warning(
-                    "[CIBA] Respuesta inesperada HTTP %d: %s",
-                    token_resp.status_code, token_resp.text,
+                    "[B/Device] HTTP %d: %s", resp.status_code, resp.text,
                 )
-                token_resp.raise_for_status()
+                resp.raise_for_status()
 
-            logger.error("[CIBA] Timeout esperando aprobación del usuario")
-            raise TimeoutError(
-                f"CIBA: el usuario {user_id} no aprobó la request en "
-                f"{poll_timeout}s"
-            )
+        raise TimeoutError(
+            f"[B/Device] El humano no aprobó en {expires_in}s"
+        )
+
+    # ----------------------------------------------------------------- #
+    # UserInfo (opcional, para debugging / ver quién es el humano)      #
+    # ----------------------------------------------------------------- #
+    async def userinfo(self, access_token: str) -> dict[str, Any]:
+        """Llama al endpoint /userinfo con el token del usuario."""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(IDP_USERINFO_ENDPOINT, headers=headers)
+            resp.raise_for_status()
+            return resp.json()

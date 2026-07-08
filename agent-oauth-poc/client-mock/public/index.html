@@ -1,544 +1,282 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a0b2e" />
-  <title>📱 AgentAuth — Push CIBA</title>
+  <meta charset="utf-8">
+  <title>Client Mock · Agente IA PoC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    /* ─────────────────────────────────────────────
-       Reset + base
-       ───────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; min-height: 100%; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-                   Arial, "Noto Sans", sans-serif;
-      background: linear-gradient(160deg, #1a0b2e 0%, #2d1b4e 45%, #4a1d6e 100%);
-      background-attachment: fixed;
-      color: #f5f3ff;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f5f7fa;
       min-height: 100vh;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-      padding: 0 0 60px 0;
+      padding: 20px;
+      color: #1a2332;
     }
-
-    /* ─────────────────────────────────────────────
-       Layout — simula un móvil en el centro en desktop
-       ───────────────────────────────────────────── */
-    .phone-frame {
-      max-width: 480px;
-      margin: 24px auto;
-      padding: 0 16px;
-    }
-
-    header {
-      padding: 24px 4px 16px 4px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    header .logo {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px;
-      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
-    }
-    header h1 {
-      font-size: 20px; font-weight: 700; margin: 0;
-      letter-spacing: -0.01em;
-    }
-    header p {
-      font-size: 12px; margin: 2px 0 0 0;
-      color: #c4b5fd; opacity: 0.85;
-    }
-
-    /* ─────────────────────────────────────────────
-       User selector
-       ───────────────────────────────────────────── */
-    .selector {
-      background: rgba(255, 255, 255, 0.06);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 14px 16px;
-      margin-bottom: 18px;
-      display: flex; align-items: center; gap: 12px;
-    }
-    .selector label {
-      font-size: 13px; color: #c4b5fd; font-weight: 500;
-      white-space: nowrap;
-    }
-    .selector select {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.08);
-      color: #f5f3ff;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 15px; font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      outline: none;
-      appearance: none;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23c4b5fd' d='M6 8L1 3h10z'/></svg>");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-      padding-right: 32px;
-      transition: border-color 0.15s, background-color 0.15s;
-    }
-    .selector select:focus { border-color: #a78bfa; }
-    .selector select option { background: #2d1b4e; color: #f5f3ff; }
-
-    .status-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #6b7280; flex-shrink: 0;
-      transition: background 0.2s;
-    }
-    .status-dot.live { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,0.25); }
-
-    /* ─────────────────────────────────────────────
-       Section title
-       ───────────────────────────────────────────── */
-    .section-title {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0 4px 12px 4px;
-      font-size: 13px; font-weight: 600;
-      color: #c4b5fd; text-transform: uppercase; letter-spacing: 0.08em;
-    }
-    .badge-count {
-      background: rgba(236, 72, 153, 0.2);
-      color: #f9a8d4;
-      border: 1px solid rgba(236, 72, 153, 0.3);
-      border-radius: 999px;
-      padding: 2px 10px;
-      font-size: 12px; font-weight: 700;
-      letter-spacing: 0;
-      text-transform: none;
-    }
-
-    /* ─────────────────────────────────────────────
-       Notification cards
-       ───────────────────────────────────────────── */
-    .card {
-      background: #ffffff;
-      color: #1f1147;
-      border-radius: 18px;
-      padding: 18px;
-      margin-bottom: 14px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25),
-                  0 2px 6px rgba(0, 0, 0, 0.1);
-      transition: opacity 0.5s ease, transform 0.5s ease, max-height 0.5s ease,
-                  margin 0.5s ease, padding 0.5s ease;
-      overflow: hidden;
-      max-height: 400px;
-      opacity: 1;
-    }
-    .card.fading {
-      opacity: 0;
-      transform: translateY(-8px) scale(0.98);
-      max-height: 0;
-      margin-bottom: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-    }
-    .card.approved { border-left: 4px solid #10b981; }
-    .card.rejected { border-left: 4px solid #ef4444; }
-    .card.approved .card-actions,
-    .card.rejected .card-actions { display: none; }
-    .card.approved::before,
-    .card.rejected::before {
-      content: attr(data-resolved-label);
-      display: inline-block;
-      font-size: 12px; font-weight: 700;
-      padding: 3px 10px; border-radius: 999px;
-      margin-bottom: 10px;
-    }
-    .card.approved::before {
-      background: #d1fae5; color: #065f46;
-    }
-    .card.rejected::before {
-      background: #fee2e2; color: #991b1b;
-    }
-
-    .card .scope-badge {
-      display: inline-block;
-      background: linear-gradient(135deg, #ede9fe 0%, #fce7f3 100%);
-      color: #6d28d9;
-      font-size: 11px; font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 999px;
-      letter-spacing: 0.02em;
-      margin-bottom: 10px;
-      word-break: break-word;
-    }
-    .card .request-text {
-      font-size: 15px; line-height: 1.45;
-      margin: 0 0 16px 0;
-      color: #1f1147;
-    }
-    .card .request-text strong {
-      color: #6d28d9;
-      font-weight: 700;
-    }
-    .card .meta {
-      font-size: 11px;
-      color: #6b7280;
-      margin-bottom: 14px;
-    }
-
-    .card-actions {
-      display: flex; gap: 10px;
-    }
-    .btn {
-      flex: 1;
-      padding: 12px 16px;
-      border: none;
+    .container {
+      max-width: 420px;
+      margin: 0 auto;
+      background: white;
       border-radius: 12px;
-      font-size: 14px; font-weight: 700;
-      font-family: inherit;
-      cursor: pointer;
-      transition: transform 0.1s, box-shadow 0.15s, background 0.15s;
-      letter-spacing: 0.01em;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      padding: 32px 24px;
     }
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-approve {
-      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-      color: white;
-      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+    .logo { text-align: center; margin-bottom: 24px; font-size: 2em; }
+    h1 { font-size: 1.4em; text-align: center; margin-bottom: 8px; }
+    .subtitle { text-align: center; color: #6b7889; font-size: 0.9em; margin-bottom: 28px; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9em; }
+    select, input[type="text"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #d6dce4;
+      border-radius: 6px; font-size: 1em; font-family: inherit;
     }
-    .btn-approve:hover:not(:disabled) {
-      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.5);
+    .scopes { margin: 16px 0; }
+    .scopes label {
+      display: flex; align-items: center; padding: 10px; margin-bottom: 4px;
+      border: 1px solid #e8ecf1; border-radius: 6px; cursor: pointer; font-weight: normal;
     }
-    .btn-reject {
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+    .scopes input { margin-right: 10px; }
+    .scopes .description { color: #6b7889; font-size: 0.85em; margin-left: 10px; }
+    button {
+      width: 100%; padding: 14px; background: #0066cc; color: white;
+      border: none; border-radius: 6px; font-size: 1em; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
     }
-    .btn-reject:hover:not(:disabled) {
-      box-shadow: 0 6px 16px rgba(239, 68, 68, 0.5);
+    button:hover { background: #0052a3; }
+    button:disabled { background: #a3b8cc; cursor: not-allowed; }
+    .alt-flow {
+      margin-top: 16px; text-align: center; padding-top: 16px;
+      border-top: 1px solid #e8ecf1;
     }
-
-    /* ─────────────────────────────────────────────
-       Empty state
-       ───────────────────────────────────────────── */
-    .empty {
-      text-align: center;
-      padding: 48px 20px;
-      color: #c4b5fd;
-      opacity: 0.75;
+    .alt-flow a { color: #0066cc; text-decoration: none; font-size: 0.9em; cursor: pointer; }
+    .status {
+      margin-top: 20px; padding: 12px; border-radius: 6px;
+      font-size: 0.9em; display: none;
     }
-    .empty .emoji {
-      font-size: 56px;
-      margin-bottom: 12px;
-      display: block;
-      filter: grayscale(0.2);
+    .status.show { display: block; }
+    .status.ok { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
+    .status.err { background: #fdecea; color: #b71c1c; border: 1px solid #f5c6c2; }
+    .status pre { font-size: 0.75em; overflow-x: auto; margin-top: 8px; }
+    .tabs {
+      display: flex; margin-bottom: 20px; border-bottom: 1px solid #e8ecf1;
     }
-    .empty p { margin: 4px 0; font-size: 14px; }
-    .empty .hint { font-size: 12px; opacity: 0.7; margin-top: 8px; }
-
-    /* ─────────────────────────────────────────────
-       Footer info
-       ───────────────────────────────────────────── */
-    .footer {
-      text-align: center;
-      margin-top: 28px;
-      font-size: 11px;
-      color: #c4b5fd;
-      opacity: 0.6;
-      line-height: 1.5;
+    .tab {
+      flex: 1; padding: 12px; text-align: center; cursor: pointer;
+      color: #6b7889; font-weight: 600; font-size: 0.9em;
+      border-bottom: 3px solid transparent;
     }
-    .footer code {
-      background: rgba(255,255,255,0.08);
-      padding: 1px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-    }
+    .tab.active { color: #0066cc; border-bottom-color: #0066cc; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
   </style>
 </head>
 <body>
-  <div class="phone-frame">
-    <header>
-      <div class="logo">🤖</div>
-      <div>
-        <h1>AgentAuth</h1>
-        <p>Notificaciones CIBA · PoC</p>
+  <div class="container">
+    <div class="logo">🤖</div>
+    <h1>Cliente Mock</h1>
+    <p class="subtitle">Simula el dispositivo del usuario<br>para Auth Code + PKCE y Device Code</p>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="authcode">A. Auth Code + PKCE</div>
+      <div class="tab" data-tab="device">B. Device Code</div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <!-- FLUJO A: Auth Code + PKCE                                        -->
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <div class="tab-content active" id="tab-authcode">
+      <div class="form-group">
+        <label for="user">Usuario</label>
+        <select id="user">
+          <option value="ana">Ana García</option>
+          <option value="luis">Luis Pérez</option>
+          <option value="marta">Marta López</option>
+        </select>
       </div>
-    </header>
 
-    <!-- Selector de identidad (simula "qué móvil estamos viendo") -->
-    <div class="selector">
-      <div class="status-dot" id="status-dot"></div>
-      <label for="user-select">Identidad:</label>
-      <select id="user-select">
-        <option value="">— selecciona usuario —</option>
-        <option value="ana">👩 ana</option>
-        <option value="luis">👨 luis</option>
-        <option value="marta">👩‍🦰 marta</option>
-      </select>
+      <label>Scopes que pide el agente</label>
+      <div class="scopes">
+        <label>
+          <input type="checkbox" value="calendar.read" checked>
+          <span>calendar.read</span>
+          <span class="description"> — leer calendario</span>
+        </label>
+        <label>
+          <input type="checkbox" value="calendar.write">
+          <span>calendar.write</span>
+          <span class="description"> — escribir calendario</span>
+        </label>
+        <label>
+          <input type="checkbox" value="email.send">
+          <span>email.send</span>
+          <span class="description"> — enviar emails</span>
+        </label>
+        <label>
+          <input type="checkbox" value="email.modify">
+          <span>email.modify</span>
+          <span class="description"> — gestionar correo</span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label for="acr">Forzar MFA (acr_values)</label>
+        <select id="acr">
+          <option value="">No forzar</option>
+          <option value="2">Forzar segundo factor (Keycloak)</option>
+          <option value="c2">Forzar MFA (Azure B2C)</option>
+        </select>
+      </div>
+
+      <button id="btn-authcode">Iniciar sesión con Auth Code + PKCE</button>
+
+      <div class="alt-flow">
+        <a href="#" id="btn-device-link">¿Sin UI disponible? Usa Device Code</a>
+      </div>
     </div>
 
-    <div class="section-title">
-      <span>Notificaciones</span>
-      <span class="badge-count" id="badge-count" style="display:none">0</span>
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <!-- FLUJO B: Device Code                                            -->
+    <!-- ─────────────────────────────────────────────────────────────── -->
+    <div class="tab-content" id="tab-device">
+      <p style="color: #6b7889; font-size: 0.9em; margin-bottom: 20px;">
+        Para agentes headless (CLI, server, CI/CD). El IdP te da un
+        <code>user_code</code>; vas a tu dispositivo y lo introduces.
+      </p>
+      <div class="form-group">
+        <label for="user2">Usuario</label>
+        <select id="user2">
+          <option value="ana">Ana García</option>
+          <option value="luis">Luis Pérez</option>
+          <option value="marta">Marta López</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="scope2">Scope</label>
+        <input type="text" id="scope2" value="openid profile email calendar.read">
+      </div>
+
+      <button id="btn-device">Solicitar Device Code</button>
     </div>
 
-    <div id="cards"></div>
-
-    <div class="footer">
-      Client Mock v1.0.0 · Simulación de móvil para CIBA<br>
-      Polling <code>GET /api/pending-requests</code> cada 2s
-    </div>
+    <div class="status" id="status"></div>
   </div>
 
   <script>
-    /* ─────────────────────────────────────────────
-       Estado + helpers
-       ───────────────────────────────────────────── */
-    let currentUser = null;
-    let pollTimer = null;
-    // Mapa auth_req_id -> {status, cardEl} para saber qué tarjetas
-    // ya están resueltas localmente y hacer fade out controlado.
-    const knownCards = new Map();
-
-    const $cards = document.getElementById('cards');
-    const $select = document.getElementById('user-select');
-    const $statusDot = document.getElementById('status-dot');
-    const $badge = document.getElementById('badge-count');
-
-    function escapeHtml(str) {
-      return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-    }
-
-    function timeAgo(unixSec) {
-      const diff = Math.floor(Date.now() / 1000) - unixSec;
-      if (diff < 5) return 'ahora mismo';
-      if (diff < 60) return `hace ${diff}s`;
-      if (diff < 3600) return `hace ${Math.floor(diff / 60)}m`;
-      return `hace ${Math.floor(diff / 3600)}h`;
-    }
-
-    /* ─────────────────────────────────────────────
-       Render
-       ───────────────────────────────────────────── */
-    function render(items) {
-      // Items: array devuelto por /api/pending-requests
-      // (incluye status: pending | approved | rejected)
-      const pending = items.filter(i => i.status === 'pending');
-      const resolved = items.filter(i => i.status !== 'pending');
-
-      // Badge: solo cuenta las pendientes
-      if (pending.length > 0) {
-        $badge.style.display = 'inline-block';
-        $badge.textContent = pending.length;
-      } else {
-        $badge.style.display = 'none';
-      }
-
-      if (items.length === 0) {
-        $cards.innerHTML = `
-          <div class="empty">
-            <span class="emoji">📭</span>
-            <p><strong>Sin notificaciones</strong></p>
-            <p class="hint">Cuando un agente pida un token CIBA para
-              <strong>${escapeHtml(currentUser)}</strong>, aparecerá aquí.</p>
-          </div>`;
-        knownCards.clear();
-        return;
-      }
-
-      // Construimos HTML para todas las cards del backend.
-      // Pero solo añadimos al DOM las que NO conocíamos antes,
-      // y marcamos como fading las que ya conocíamos y ahora vienen resueltas.
-      let html = '';
-      const incomingIds = new Set(items.map(i => i.auth_req_id));
-
-      // Primero, las resueltas locales (que estaban en knownCards pero ya
-      // no vienen del backend o vienen con status !== pending): marcar fade.
-      for (const [id, info] of knownCards.entries()) {
-        if (!incomingIds.has(id)) {
-          // desapareció del backend → fade out
-          if (info.cardEl && !info.cardEl.classList.contains('fading')) {
-            info.cardEl.classList.add('fading');
-            setTimeout(() => info.cardEl.remove(), 600);
-          }
-          knownCards.delete(id);
-        }
-      }
-
-      for (const item of items) {
-        const known = knownCards.get(item.auth_req_id);
-
-        if (!known) {
-          // Card nueva → añadir al DOM
-          const cardHtml = renderCard(item);
-          html += cardHtml;
-        } else {
-          // Card ya existente → si pasa de pending a approved/rejected,
-          // actualizar visualmente.
-          if (known.status === 'pending' && item.status !== 'pending') {
-            applyResolvedStyle(known.cardEl, item.status);
-            // tras 2s, fade out
-            setTimeout(() => {
-              known.cardEl.classList.add('fading');
-              setTimeout(() => known.cardEl.remove(), 600);
-            }, 2000);
-          }
-          known.status = item.status;
-        }
-      }
-
-      // Insertar nuevas cards (al inicio)
-      if (html) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        while (tmp.firstChild) {
-          const node = tmp.firstChild;
-          $cards.insertBefore(node, $cards.firstChild);
-          const id = node.getAttribute('data-id');
-          if (id) {
-            knownCards.set(id, { status: 'pending', cardEl: node });
-          }
-        }
-      }
-
-      // Limpiar cards "fading" del DOM para no acumularlas
-      // (ya se eliminan en el setTimeout anterior)
-    }
-
-    function renderCard(item) {
-      const scopeHtml = item.scope
-        ? `<span class="scope-badge">🔐 ${escapeHtml(item.scope)}</span>`
-        : '';
-      const resolvedLabel =
-        item.status === 'approved' ? '✓ APROBADO' :
-        item.status === 'rejected' ? '✗ RECHAZADO' : '';
-
-      const actionsHtml = item.status === 'pending' ? `
-        <div class="card-actions">
-          <button class="btn btn-reject" data-action="reject" data-id="${escapeHtml(item.auth_req_id)}">
-            ✗ Rechazar
-          </button>
-          <button class="btn btn-approve" data-action="approve" data-id="${escapeHtml(item.auth_req_id)}">
-            ✓ Aprobar
-          </button>
-        </div>` : '';
-
-      const extraClass = item.status === 'approved' ? 'approved' :
-                         item.status === 'rejected' ? 'rejected' : '';
-
-      return `
-        <div class="card ${extraClass}" data-id="${escapeHtml(item.auth_req_id)}"
-             data-resolved-label="${resolvedLabel}">
-          ${scopeHtml}
-          <p class="request-text">
-            <strong>${escapeHtml(item.agent)}</strong> pide:
-            ${escapeHtml(item.request_text)}
-          </p>
-          <div class="meta">${timeAgo(item.requested_at)}</div>
-          ${actionsHtml}
-        </div>`;
-    }
-
-    function applyResolvedStyle(cardEl, status) {
-      cardEl.classList.remove('approved', 'rejected');
-      cardEl.classList.add(status);
-      cardEl.setAttribute('data-resolved-label',
-        status === 'approved' ? '✓ APROBADO' : '✗ RECHAZADO');
-    }
-
-    /* ─────────────────────────────────────────────
-       Polling
-       ───────────────────────────────────────────── */
-    async function poll() {
-      if (!currentUser) return;
-      try {
-        const res = await fetch(`/api/pending-requests?user=${encodeURIComponent(currentUser)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        $statusDot.classList.add('live');
-        render(data.items || []);
-      } catch (err) {
-        $statusDot.classList.remove('live');
-        console.error('poll error', err);
-      }
-    }
-
-    function startPolling() {
-      stopPolling();
-      poll(); // inmediato
-      pollTimer = setInterval(poll, 2000);
-    }
-
-    function stopPolling() {
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    }
-
-    /* ─────────────────────────────────────────────
-       Eventos: selector + botones (delegación)
-       ───────────────────────────────────────────── */
-    $select.addEventListener('change', (e) => {
-      currentUser = e.target.value;
-      knownCards.clear();
-      $cards.innerHTML = '';
-      $statusDot.classList.remove('live');
-      $badge.style.display = 'none';
-      if (currentUser) {
-        startPolling();
-      } else {
-        stopPolling();
-      }
+    // ─── Tabs ────────────────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+    document.getElementById('btn-device-link').addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelector('[data-tab="device"]').click();
     });
 
-    $cards.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button[data-action]');
-      if (!btn) return;
-      const action = btn.dataset.action; // 'approve' | 'reject'
-      const id = btn.dataset.id;
-      if (!id) return;
+    // ─── Helpers ─────────────────────────────────────────────────────
+    const STATUS = document.getElementById('status');
+    const showStatus = (msg, type, data) => {
+      STATUS.className = 'status show ' + type;
+      STATUS.innerHTML = msg + (data ? `<pre>${JSON.stringify(data, null, 2)}</pre>` : '');
+    };
 
-      // Deshabilitar ambos botones de la card
-      const cardEl = btn.closest('.card');
-      cardEl.querySelectorAll('button').forEach(b => b.disabled = true);
+    // ─── FLUJO A: Auth Code + PKCE ───────────────────────────────────
+    document.getElementById('btn-authcode').addEventListener('click', async () => {
+      const user = document.getElementById('user').value;
+      const acr = document.getElementById('acr').value;
+      const scopes = Array.from(document.querySelectorAll('.scopes input:checked'))
+        .map(cb => cb.value);
+      const scope = ['openid', 'profile', 'email', ...scopes].join(' ');
+
+      showStatus('Iniciando Auth Code + PKCE...', 'ok');
 
       try {
-        const res = await fetch(`/${action}`, {
+        const resp = await fetch('/auth/authorize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ auth_req_id: id }),
+          body: JSON.stringify({
+            user_id: user,
+            scope,
+            acr_values: acr || null,
+          }),
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          alert(`Error: ${err.error || res.statusText}`);
-          cardEl.querySelectorAll('button').forEach(b => b.disabled = false);
-        }
-        // El siguiente poll (≤2s) actualizará visualmente la card
-      } catch (err) {
-        console.error(action, err);
-        alert(`Error de red: ${err.message}`);
-        cardEl.querySelectorAll('button').forEach(b => b.disabled = false);
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error);
+
+        // Guardamos la sesión en localStorage para la polling de callback
+        localStorage.setItem(`pkce_${data.state}`, JSON.stringify({
+          code_verifier: data.code_verifier,
+          session_id: data.session_id,
+        }));
+
+        showStatus(
+          `PKCE generado. Redirigiendo a ${data.authorize_url.slice(0, 80)}...`,
+          'ok',
+          { state: data.state, session_id: data.session_id }
+        );
+
+        // En producción: location.href = data.authorize_url
+        // Para que el test funcione sin un browser que redirija, mostramos el link:
+        STATUS.innerHTML += `<br><br><a href="${data.authorize_url}" target="_blank" 
+          style="background: #0066cc; color: white; padding: 10px 20px; border-radius: 4px; text-decoration: none; display: inline-block;">
+          🌍 Ir al IdP ahora
+        </a>`;
+      } catch (e) {
+        showStatus('❌ ' + e.message, 'err');
       }
     });
 
-    // Heartbeat del dot para que se vea "vivo"
-    setInterval(() => {
-      if (currentUser && $statusDot.classList.contains('live')) {
-        $statusDot.style.transform = 'scale(1.2)';
-        setTimeout(() => $statusDot.style.transform = 'scale(1)', 200);
+    // ─── FLUJO B: Device Code ────────────────────────────────────────
+    document.getElementById('btn-device').addEventListener('click', async () => {
+      const user = document.getElementById('user2').value;
+      const scope = document.getElementById('scope2').value;
+
+      showStatus('Pidiendo device_code al agente...', 'ok');
+
+      try {
+        const resp = await fetch('/auth/device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: user, scope }),
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error);
+
+        showStatus(
+          `<strong>Tu código:</strong> <code style="font-size:1.3em">${data.user_code}</code><br>
+           <strong>Ve a:</strong> <a href="${data.verification_uri}" target="_blank">${data.verification_uri}</a><br>
+           <small>Expira en ${data.expires_in}s</small>`,
+          'ok'
+        );
+
+        // Abrir página dédiée con countdown
+        const deviceUrl = `/device?user_code=${encodeURIComponent(data.user_code)}&` +
+                          `verification_uri=${encodeURIComponent(data.verification_uri)}&` +
+                          `expires_in=${data.expires_in}`;
+        window.open(deviceUrl, '_blank');
+      } catch (e) {
+        showStatus('❌ ' + e.message, 'err');
       }
-    }, 2000);
+    });
+
+    // ─── Si volvimos del callback ─────────────────────────────────────
+    const params = new URLSearchParams(location.search);
+    if (params.get('auth') === 'ok') {
+      const sid = params.get('session_id');
+      showStatus(
+        `✅ ¡Autenticado! Sesión: <code>${sid}</code>`,
+        'ok'
+      );
+    } else if (params.get('error')) {
+      showStatus(
+        `❌ Error: ${params.get('error')}<br>${params.get('detail') || params.get('error_description')}`,
+        'err'
+      );
+    }
   </script>
 </body>
 </html>
