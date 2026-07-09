@@ -118,6 +118,45 @@ def test_identity_payload_incluye_claims_dni_dob():
     assert assertion["identity_method"] == "dni+dob"
 
 
+def test_identity_assertion_incluye_requested_scope():
+    """La identity_assertion debe propagar requested_scope = req.scope.
+
+    Esto es necesario porque KC 26.6.4 broker jwt-bearer ignora el param
+    'scope' del grant (BUG) y emite el access_token con TODOS los scopes.
+    Propagando requested_scope en la assertion, KC lo copia al access_token
+    via IdentityProviderMapper + ClientProtocolMapper.
+    Spring filtra authorities por ese claim (no por scope completo).
+    """
+    client = TestClient(app.app)
+    r = client.post("/agente/auth/identity", json={
+        "user_id": "ana",
+        "dni": "12345678Z",
+        "dob": "1990-05-15",
+        "scope": "email.send",
+    })
+    assert r.status_code == 200
+    challenge_id = r.json()["challenge_id"]
+    assertion = PENDING_CHALLENGES[challenge_id]["identity_assertion"]
+    assert assertion["requested_scope"] == "email.send"
+
+
+def test_identity_assertion_requested_scope_distinto_segun_input():
+    """Cada llamada con scope distinto -> requested_scope distinto."""
+    client = TestClient(app.app)
+    scopes_enviados = []
+    for scope in ("calendar.read", "email.send", "calendar.write"):
+        r = client.post("/agente/auth/identity", json={
+            "user_id": "ana",
+            "dni": "12345678Z",
+            "dob": "1990-05-15",
+            "scope": scope,
+        })
+        assert r.status_code == 200
+        assertion = PENDING_CHALLENGES[r.json()["challenge_id"]]["identity_assertion"]
+        scopes_enviados.append(assertion["requested_scope"])
+    assert scopes_enviados == ["calendar.read", "email.send", "calendar.write"]
+
+
 def test_identity_dni_formato_invalido_422():
     """DNI con formato inválido (no 8+letra) -> 422 (Pydantic validation)."""
     client = TestClient(app.app)

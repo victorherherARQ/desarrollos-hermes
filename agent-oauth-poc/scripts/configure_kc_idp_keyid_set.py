@@ -1,0 +1,81 @@
+"""Configura publicKeySignatureVerifierKeyId con kid del agente."""
+import json
+import sys
+import urllib.error
+import urllib.request
+
+KC_BASE = "http://localhost:8180"
+KC_REALM = "agent-poc"
+KC_IDP_ALIAS = "agent-poc-jwt-broker"
+ADMIN_USER = "admin"
+ADMIN_PASSWORD = "admi...n"
+
+
+def admin_token() -> str:
+    data = "username=" + ADMIN_USER + "&password=" + ADMIN_PASSWORD + \
+        "&grant_type=password&client_id=admin-cli"
+    data = data.encode()
+    req = urllib.request.Request(
+        KC_BASE + "/realms/master/protocol/openid-connect/token",
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())["access_token"]
+
+
+def get_idp(token: str) -> dict:
+    req = urllib.request.Request(
+        f"{KC_BASE}/admin/realms/{KC_REALM}/identity-provider/instances/{KC_IDP_ALIAS}",
+        headers={"Authorization": "Bearer " + token, "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+def put_idp(token: str, body: dict) -> tuple[int, str]:
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"{KC_BASE}/admin/realms/{KC_REALM}/identity-provider/instances/{KC_IDP_ALIAS}",
+        data=data,
+        headers={
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json",
+        },
+        method="PUT",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def main() -> int:
+    token = admin_token()
+    current = get_idp(token)
+    config = current.get("config", {})
+
+    kid = "abbffe9170c7fe6e"
+    config["publicKeySignatureVerifierKeyId"] = kid
+
+    body = {
+        "alias": current["alias"],
+        "providerId": current["providerId"],
+        "config": config,
+        "enabled": current.get("enabled", True),
+    }
+    status, response = put_idp(token, body)
+    print(f"PUT IdP (set keyId) -> {status}: {response[:200]}")
+    if status in (200, 204):
+        # verify
+        current = get_idp(token)
+        config = current.get("config", {})
+        print(f"now publicKeySignatureVerifierKeyId = {config.get('publicKeySignatureVerifierKeyId')!r}")
+        return 0
+    print(f"ERROR: {status}: {response}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

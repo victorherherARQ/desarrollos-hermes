@@ -370,10 +370,19 @@ async def auth_identity(req: IdentityRequest) -> IdentityResponse:
         "JWT_AUTH_GRANT_ISSUER",
         "http://localhost:8180/realms/agent-poc/idp/jwt-broker",
     )
+    # aud de la identity_assertion = issuer del realm KC (URL externa pública).
+    # KC 26.6.4 valida que aud coincida con uno de:
+    #   - http://<external-base>/realms/<realm>            (realm issuer)
+    #   - http://<external-base>/realms/<realm>/protocol/openid-connect/token
+    # Por defecto usamos el issuer externo.
+    _jwt_auth_audience = os.getenv(
+        "JWT_AUTH_GRANT_AUDIENCE",
+        "http://keycloak:8080/realms/agent-poc",
+    )
     identity_assertion = {
         "iss":             _jwt_auth_issuer,
         "sub":             req.user_id,
-        "aud":             IDP_ISSUER,
+        "aud":             _jwt_auth_audience,
         "iat":             iat,
         "exp":             exp,
         "jti":             challenge_id,
@@ -385,6 +394,12 @@ async def auth_identity(req: IdentityRequest) -> IdentityResponse:
         "channel":         "id-claim",
         "act":             {"sub": AGENT_CLIENT_ID},  # RFC 8693
         "mobile_device_id": user["mobile_token"],
+        # Workaround BUG KC 26.6.4: el broker jwt-bearer ignora el param 'scope'
+        # del grant y emite el token con TODOS los scopes del client. Para que el
+        # API Spring pueda discriminar, propagamos el scope original del usuario
+        # como claim custom 'requested_scope' en la assertion. KC lo copia al
+        # access_token via IdentityProvider Mapper + Client Protocol Mapper.
+        "requested_scope": req.scope,
     }
 
     # Persistir

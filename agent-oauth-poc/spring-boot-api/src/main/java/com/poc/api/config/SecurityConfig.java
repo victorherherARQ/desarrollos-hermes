@@ -23,6 +23,8 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -113,6 +115,16 @@ public class SecurityConfig {
      * (space-separated) o {@code scp} (array) y los mapea a
      * {@link SimpleGrantedAuthority} con prefijo {@code SCOPE_},
      * tal como espera Spring Security ({@code hasAuthority("SCOPE_xxx")}).
+     *
+     * <p><b>Filtro por {@code requested_scope}:</b> además, si el JWT incluye
+     * el claim custom {@code requested_scope} (workaround del BUG KC 26.6.4
+     * broker jwt-bearer que ignora el param {@code scope} del grant y emite
+     * el token con TODOS los scopes), solo concedemos authorities que estén
+     * tanto en el claim {@code scope} como en {@code requested_scope}.</p>
+     *
+     * <p>Si {@code requested_scope} está presente pero el usuario no tiene
+     * ningún scope coincidente, el token no tiene authorities — Spring
+     * responderá 403 en cualquier endpoint protegido.</p>
      */
     static class ScopeAuthoritiesConverter
             implements Converter<Jwt, Collection<GrantedAuthority>> {
@@ -120,6 +132,7 @@ public class SecurityConfig {
         private static final String SCOPE_PREFIX = "SCOPE_";
         private static final String CLAIM_SCOPE = "scope";
         private static final String CLAIM_SCP = "scp";
+        private static final String CLAIM_REQUESTED_SCOPE = "requested_scope";
 
         @Override
         public Collection<GrantedAuthority> convert(Jwt jwt) {
@@ -138,6 +151,24 @@ public class SecurityConfig {
             } else if (scp instanceof String s && !s.isBlank()) {
                 scopes.addAll(Arrays.asList(s.split("\\s+")));
             }
+
+            if (scopes.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            // ─── Filter by requested_scope (workaround BUG KC 26.6.4) ─────
+            // If the token has requested_scope set, intersect with scope claim.
+            // If absent, behave as before (no narrowing).
+            Object reqScope = jwt.getClaim(CLAIM_REQUESTED_SCOPE);
+            if (reqScope instanceof String rs && !rs.isBlank()) {
+                Set<String> requested = Arrays.stream(rs.split("\\s+"))
+                        .filter(s -> !s.isBlank())
+                        .collect(Collectors.toSet());
+                scopes = scopes.stream()
+                        .filter(requested::contains)
+                        .collect(Collectors.toList());
+            }
+            // ────────────────────────────────────────────────────────────────
 
             if (scopes.isEmpty()) {
                 return Collections.emptyList();
