@@ -105,6 +105,57 @@ def _sign_identity_assertion(
         headers={"typ": "JWT", "kid": AGENT_SIGNING_KID},
     )
 
+
+# ─── Helper: firmar requested_scope_token (HS256 con shared secret) ────
+# BUG KC 26.6.4 workaround: el broker jwt-bearer ignora el param 'scope'
+# del grant, así que el access_token sale con TODOS los scopes. Para que
+# el API Spring pueda discriminar qué scope pidió el usuario, el agente
+# firma un mini-JWT HS256 con el scope original. Spring lo valida con el
+# mismo REQUESTED_SCOPE_SHARED_SECRET y filtra authorities por intersección.
+REQUESTED_SCOPE_SHARED_SECRET = os.getenv(
+    "REQUESTED_SCOPE_SHARED_SECRET",
+    "poC-shared-secret-CHANGE-ME-32bytes-min-para-hs256",
+)
+
+
+def _sign_requested_scope_token(
+    user_id: str,
+    scope: str,
+    challenge_id: str,
+    *,
+    ttl_seconds: int = 300,
+) -> str:
+    """Firma un mini-JWT HS256 con el scope original del usuario.
+
+    El cliente lo pasa al API en el header `X-Requested-Scope-Token`.
+    Spring lo valida con REQUESTED_SCOPE_SHARED_SECRET y extrae el
+    claim `scope` para filtrar authorities.
+
+    Args:
+        user_id: usuario al que se emitió el access_token.
+        scope: scope original pedido (e.g. "calendar.read").
+        challenge_id: ID del challenge, para trazabilidad.
+        ttl_seconds: vida util del token (default 5 min).
+
+    Returns:
+        JWT compacto HS256 (header.payload.signature).
+    """
+    now = int(time.time())
+    payload = {
+        "iss": "agente-ia",
+        "sub": user_id,
+        "scope": scope,
+        "challenge_id": challenge_id,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "jti": uuid.uuid4().hex,
+    }
+    return pyjwt.encode(
+        payload,
+        REQUESTED_SCOPE_SHARED_SECRET,
+        algorithm="HS256",
+    )
+
 # ─── Logging ────────────────────────────────────────────────────────────────
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -159,6 +210,15 @@ class TokenResponse(BaseModel):
     expires_in: int | None = None
     scope: str | None = None
     token_type: str | None = "Bearer"
+    # ─── BUG KC 26.6.4 workaround ───
+    # El broker jwt-bearer ignora el param 'scope' del grant y emite el
+    # access_token con TODOS los scopes. Para que el API Spring pueda
+    # discriminar, el agente firma un mini-JWT HS256 con el scope original
+    # y lo devuelve junto al access_token. El cliente lo pasa al API en
+    # el header 'X-Requested-Scope-Token'. Spring lo valida con el mismo
+    # secret (compartido solo entre agente y Spring) y filtra authorities.
+    requested_scope_token: str | None = None
+    requested_scope: str | None = None
 
 
 class DeviceRequest(BaseModel):
@@ -502,14 +562,27 @@ async def auth_identity_poll(challenge_id: str, biometric_used: bool = True) -> 
 
     # Limpiar challenge tras éxito
     user_id = challenge["user_id"]
+
+    # ─── BUG KC 26.6.4 workaround: emitir requested_scope_token ───
+    # El agente firma un mini-JWT HS256 con el scope original para que
+    # el cliente lo pase al API como header X-Requested-Scope-Token.
+    # Spring lo validará con REQUESTED_SCOPE_SHARED_SECRET (mismo secret).
+    requested_scope_token = _sign_requested_scope_token(
+        user_id=user_id,
+        scope=challenge["scope"],
+        challenge_id=challenge_id,
+    )
+
     PENDING_CHALLENGES.pop(challenge_id, None)
 
-    logger.info("[C/Identity] access_token emitido para user=%s", user_id)
+    logger.info("[C/Identity] access_token emitido para user=%s scope=%s", user_id, challenge["scope"])
     return TokenResponse(
         access_token=token["access_token"],
         expires_in=token["expires_in"],
         token_type=token.get("token_type", "Bearer"),
         scope=token.get("scope", challenge["scope"]),
+        requested_scope_token=requested_scope_token,
+        requested_scope=challenge["scope"],
     )
 
 

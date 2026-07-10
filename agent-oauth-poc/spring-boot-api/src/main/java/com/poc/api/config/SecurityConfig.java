@@ -49,7 +49,10 @@ public class SecurityConfig {
     private static final String EXPECTED_AUDIENCE = "spring-boot-api";
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            RequestedScopeFilter requestedScopeFilter
+    ) throws Exception {
         http
             // API stateless
             .csrf(csrf -> csrf.disable())
@@ -59,6 +62,11 @@ public class SecurityConfig {
             .oauth2ResourceServer(oauth2 -> oauth2
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
             )
+
+            // Filtro custom: down-scope por header X-Requested-Scope-Token
+            // (workaround BUG KC 26.6.4 broker jwt-bearer).
+            .addFilterAfter(requestedScopeFilter,
+                    org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
 
             .authorizeHttpRequests(auth -> auth
                 // Endpoints públicos de health
