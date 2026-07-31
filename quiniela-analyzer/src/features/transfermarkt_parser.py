@@ -54,9 +54,16 @@ TM_TO_TEAM_ID: dict[str, str] = {
     "Real Valladolid CF":   "valladolid",
     "RCD Espanyol de Barcelona": "espanyol",
     " Deportivo Alavés":    "alaves",
-    "Deportivo Alavés":      "alaves",
-    "UD Las Palmas":         "las_palmas",
+    "Deportivo Alavés":     "alaves",
+    "UD Las Palmas":        "las_palmas",
     " Sevilla FC":           "sevilla",
+    # Teams without a current SP1 match but present on the overview page
+    "RCD Espanyol Barcelona": "espanol",
+    "Levante UD":            "levante",
+    "Deportivo A Coruña":    "la_coruna",
+    "Racing Santander":     "santander",
+    "Elche CF":             "elche",
+    "Málaga CF":            "malaga",
 }
 
 
