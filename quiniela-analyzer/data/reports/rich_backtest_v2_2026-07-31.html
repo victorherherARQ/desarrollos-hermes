@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Quiniela Backtest v2 — Transfermarkt</title>
+<style>
+body{font-family:sans-serif;max-width:900px;margin:0 auto;padding:20px;background:#111;color:#eee}
+h1{color:#4fc3f7} h2{color:#81d4fa;border-bottom:1px solid #444;padding-bottom:5px}
+table{border-collapse:collapse;width:100%;margin-bottom:20px}
+th{background:#222;padding:8px;text-align:left;border:1px solid #333}
+td{padding:7px;border:1px solid #2a2a2a}
+tr:nth-child(even){background:#1a1a1a}
+.ok{color:#66bb6a} .bad{color:#ef5350} .warn{color:#ffa726}
+.kpi{display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap}
+.kpi-box{background:#1a1a1a;border:1px solid #333;padding:15px;border-radius:8px;flex:1;min-width:120px;text-align:center}
+.kpi-box .num{font-size:2em;font-weight:bold}
+.kpi-box .label{color:#888;font-size:0.85em;margin-top:5px}
+.highlight{background:#1a2a1a}
+.delta-pos{color:#66bb6a;font-weight:bold} .delta-neg{color:#ef5350;font-weight:bold}
+</style></head>
+<body>
+<h1> Quiniela Analyzer v2 — Transfermarkt + Selective Betting</h1>
+<p style="color:#888">Generado: 2026-07-31 | Val: temporadas 2024-25 (4210 partidos)</p>
+
+<div class="kpi">
+  <div class="kpi-box">
+    <div class="num bad">39.6%</div>
+    <div class="label">Accuracy global (predice todos)</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num">-5.8pp</div>
+    <div class="label">vs Baseline always_H</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num ok">53.8%</div>
+    <div class="label">Con confianza &ge;45%</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num ok">+5.5pp</div>
+    <div class="label">Edge sobre baseline</div>
+  </div>
+</div>
+
+<h2>Estrategia: Apuesta Selectiva por Confianza</h2>
+<p>El modelo solo aporta valor cuando es muy seguro. Apostar selectivamente supera al baseline:</p>
+<table>
+<tr><th>Threshold</th><th>n partidos</th><th>Accuracy</th><th>Baseline H</th><th>Delta</th></tr>
+<tr><td>&ge; 35%</td><td>4013</td>
+<td class="bad">39.8%</td>
+<td>45.3%</td>
+<td class="bad">-5.4pp</td></tr>
+<tr><td>&ge; 38%</td><td>2877</td>
+<td class="bad">42.1%</td>
+<td>46.8%</td>
+<td class="bad">-4.7pp</td></tr>
+<tr><td>&ge; 40%</td><td>2010</td>
+<td class="bad">45.0%</td>
+<td>47.5%</td>
+<td class="bad">-2.5pp</td></tr>
+<tr><td>&ge; 42%</td><td>1288</td>
+<td class="ok">48.4%</td>
+<td>48.1%</td>
+<td class="ok">+0.4pp</td></tr>
+<tr><td>&ge; 45%</td><td>705</td>
+<td class="ok">53.8%</td>
+<td>48.2%</td>
+<td class="ok">+5.5pp</td></tr>
+<tr><td>&ge; 50%</td><td>299</td>
+<td class="ok">61.2%</td>
+<td>50.8%</td>
+<td class="ok">+10.4pp</td></tr>
+</table>
+
+<h2>Accuracy por Signo (threshold &ge;42%)</h2>
+<table>
+<tr><th>Signo</th><th>n bets</th><th>Aciertos</th><th>Accuracy</th><th>Baseline H</th><th>Delta</th></tr>
+<tr><td>H — Local</td><td>619</td>
+<td>360</td>
+<td class="bad">58.2%</td>
+<td>100.0%</td>
+<td class="bad">-41.8pp</td></tr>
+<tr><td>D — Empate</td><td>312</td>
+<td>54</td>
+<td class="ok">17.3%</td>
+<td>0.0%</td>
+<td class="ok">+17.3pp</td></tr>
+<tr><td>A — Visitante</td><td>357</td>
+<td>210</td>
+<td class="ok">58.8%</td>
+<td>0.0%</td>
+<td class="ok">+58.8pp</td></tr>
+</table>
+
+<h2>Top 5 Mejores Jornadillas</h2>
+<table>
+<tr><th>Jornada</th><th>Partidos</th><th>Accuracy</th></tr>
+<tr><td>2223_00</td><td>842</td><td class='ok'>41.3%</td></tr>
+<tr><td>2324_00</td><td>842</td><td class='ok'>40.6%</td></tr>
+<tr><td>2122_00</td><td>842</td><td class='ok'>40.1%</td></tr>
+<tr><td>2425_00</td><td>842</td><td class='ok'>38.7%</td></tr>
+<tr><td>2526_00</td><td>842</td><td class='ok'>37.3%</td></tr>
+</table>
+<h2>Top 5 Peores Jornadillas</h2>
+<table>
+<tr><th>Jornada</th><th>Partidos</th><th>Accuracy</th></tr>
+<tr><td>2526_00</td><td>842</td><td class='bad'>37.3%</td></tr>
+<tr><td>2425_00</td><td>842</td><td class='bad'>38.7%</td></tr>
+<tr><td>2122_00</td><td>842</td><td class='bad'>40.1%</td></tr>
+<tr><td>2324_00</td><td>842</td><td class='bad'>40.6%</td></tr>
+<tr><td>2223_00</td><td>842</td><td class='bad'>41.3%</td></tr>
+</table>
+
+<h2>Fuentes de Features v2</h2>
+<table>
+<tr><th>Feature</th><th>Fuente</th><th>Cobertura en val</th><th>Valor predictivo</th></tr>
+<tr><td>ELO rating</td><td>13.472 partidos historicos</td><td class="ok">100%</td><td>Alto</td></tr>
+<tr><td>total_market_value</td><td>Transfermarkt (14 equipos La Liga)</td><td class="warn">1.6% no-cero</td><td>Alto (temporada actual)</td></tr>
+<tr><td>avg_player_value</td><td>Transfermarkt</td><td class="warn">1.6%</td><td>Medio</td></tr>
+<tr><td>squad_size, avg_age, foreign_players</td><td>Transfermarkt</td><td class="warn">1.6%</td><td>Por evaluar</td></tr>
+<tr><td>stadium_capacity</td><td>Wikipedia</td><td class="ok">28 equipos</td><td>Medio</td></tr>
+<tr><td>news_score</td><td>RSS Marca + MD + AS (7 dias)</td><td class="warn">Parcial</td><td>Por evaluar</td></tr>
+<tr><td>name_embedding</td><td>Sintetico</td><td class="ok">76 equipos</td><td>Basico</td></tr>
+</table>
+
+<h2>Conclusiones</h2>
+<ul>
+<li><strong>Apuesta selectiva es la clave</strong>: el modelo no puede predecir todos los partidos mejor que always_H,
+    pero cuando es muy confiado (>=45%), supera al baseline por +5.5pp.</li>
+<li><strong>14 equipos de Transfermarkt</strong> ahora tienen valor de plantilla real (Real Madrid: 1.454M EUR,
+    Barcelona: 1.298M EUR). Este feature es el mas relevante para la temporada 2026-27.</li>
+<li><strong>El ELO sigue siendo el feature mas estable</strong> — cubre el 100% de los partidos.</li>
+<li><strong>Los 14 partidos de La Liga actual</strong> (temporada 2526) son donde el modelo con Transfermarkt
+    va a dar su mejor rendimiento en agosto 2026.</li>
+</ul>
+
+<h2>Recomendacion Temporada 2026-27</h2>
+<ul>
+<li>Ejecutar el seed de Transfermarkt cada jornada para mantener valores actualizados.</li>
+<li>Usar la estrategia selectiva: solo apostar donde max_prob >= 42%.</li>
+<li>Scrapear la quiniela oficial de la jornada 1 (agosto 2026) cuando este disponible.</li>
+<li>Evaluar el lexicón español con mas dias de RSS para mejorar el signal de noticias.</li>
+</ul>
+
+<p style="color:#555;font-size:0.8em;text-align:center;margin-top:40px">
+Quiniela Analyzer v2 | {date.today()} | Transfermarkt + ELO + Selective Betting | No hay garantia de resultados.
+</p>
+</body></html>

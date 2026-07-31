@@ -42,6 +42,35 @@ def get_stadium_capacity(conn: sqlite3.Connection, team_id: str, season: str) ->
     return row[0] if row else None
 
 
+def get_transfermarkt_features(conn: sqlite3.Connection, team_id: str, season: str) -> dict:
+    """Get all Transfermarkt market value features for a team/season.
+
+    Keys are generic (no _home/_away) — caller adds suffix.
+    """
+    row = conn.execute(
+        """SELECT total_market_value_eur_m, avg_player_value_eur_m,
+                  squad_size, average_age, foreign_players
+           FROM team_features
+           WHERE team_id = ? AND season = ?""",
+        (team_id, season),
+    ).fetchone()
+    if row:
+        return {
+            "market_value": row[0] or 0.0,
+            "avg_player_value": row[1] or 0.0,
+            "squad_size": row[2] or 0,
+            "avg_age": row[3] or 0.0,
+            "foreign_players": row[4] or 0,
+        }
+    return {
+        "market_value": 0.0,
+        "avg_player_value": 0.0,
+        "squad_size": 0,
+        "avg_age": 0.0,
+        "foreign_players": 0,
+    }
+
+
 def get_name_embedding(conn: sqlite3.Connection, team_id: str) -> list[float]:
     row = conn.execute(
         "SELECT name_embedding FROM teams WHERE team_id = ?",
@@ -81,6 +110,10 @@ def build_feature_row(conn: sqlite3.Connection, row: tuple) -> dict | None:
     cap_home = get_stadium_capacity(conn, home_team, season)
     cap_away = get_stadium_capacity(conn, away_team, season)
 
+    # Transfermarkt market value features
+    tm_home = get_transfermarkt_features(conn, home_team, season)
+    tm_away = get_transfermarkt_features(conn, away_team, season)
+
     # Name embeddings
     emb_home = get_name_embedding(conn, home_team)
     emb_away = get_name_embedding(conn, away_team)
@@ -98,11 +131,27 @@ def build_feature_row(conn: sqlite3.Connection, row: tuple) -> dict | None:
         "matchday_date": matchday_date,
         "home_team": home_team,
         "away_team": away_team,
+        "home_goals": home_goals,
+        "away_goals": away_goals,
         "ELO_home": elo_home or 1500.0,
         "ELO_away": elo_away or 1500.0,
         "ELO_diff": (elo_home or 1500.0) - (elo_away or 1500.0),
         "stadium_capacity_home": cap_home or 0.0,
         "stadium_capacity_away": cap_away or 0.0,
+        "total_market_value_home": tm_home["market_value"],
+        "total_market_value_away": tm_away["market_value"],
+        "market_value_ratio": (
+            tm_home["market_value"] / max(tm_away["market_value"], 1.0)
+            if tm_away["market_value"] > 0 else 1.0
+        ),
+        "avg_player_value_home": tm_home["avg_player_value"],
+        "avg_player_value_away": tm_away["avg_player_value"],
+        "squad_size_home": tm_home["squad_size"],
+        "squad_size_away": tm_away["squad_size"],
+        "avg_age_home": tm_home["avg_age"],
+        "avg_age_away": tm_away["avg_age"],
+        "foreign_players_home": tm_home["foreign_players"],
+        "foreign_players_away": tm_away["foreign_players"],
         "news_score_home": news_home,
         "news_score_away": news_away,
         "result": result,
