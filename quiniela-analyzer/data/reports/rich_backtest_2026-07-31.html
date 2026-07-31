@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Quiniela Backtest 2024-25</title>
+<style>
+body{font-family:sans-serif;max-width:900px;margin:0 auto;padding:20px;background:#111;color:#eee}
+h1{color:#4fc3f7}
+h2{color:#81d4fa;border-bottom:1px solid #444;padding-bottom:5px}
+table{border-collapse:collapse;width:100%;margin-bottom:20px}
+th{background:#222;padding:8px;text-align:left;border:1px solid #333}
+td{padding:7px;border:1px solid #2a2a2a}
+tr:nth-child(even){background:#1a1a1a}
+.ok{color:#66bb6a} .bad{color:#ef5350} .warn{color:#ffa726}
+.kpi{display:flex;gap:20px;margin-bottom:20px}
+.kpi-box{background:#1a1a1a;border:1px solid #333;padding:15px;border-radius:8px;flex:1;text-align:center}
+.kpi-box .num{font-size:2em;font-weight:bold}
+.kpi-box .label{color:#888;font-size:0.85em;margin-top:5px}
+.barra{background:#333;height:8px;border-radius:4px;margin-top:4px}
+.barra-fill{height:100%;border-radius:4px}
+.highlight{background:#1a2a1a}
+</style></head>
+<body>
+<h1>⚽ Quiniela Analyzer — Backtest Rich Features</h1>
+<p style="color:#888">Generado: 2026-07-31 | Val: temporadas 2024-25 (4210 partidos)</p>
+
+<div class="kpi">
+  <div class="kpi-box">
+    <div class="num bad">45.34%</div>
+    <div class="label">Accuracy Ensemble</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num">-1.54 pp</div>
+    <div class="label">vs Baseline (always_1)</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num">❌</div>
+    <div class="label">Supera baseline</div>
+  </div>
+  <div class="kpi-box">
+    <div class="num">⚠️</div>
+    <div class="label">Meta 47%</div>
+  </div>
+</div>
+
+<h2>📊 Resultado Global</h2>
+<table>
+<tr><th>Métrica</th><th>Valor</th><th>Nota</th></tr>
+<tr><td>Accuracy Ensemble</td><td class="bad">45.34%</td><td>Con features: ELO + stadium_capacity + news_score + name_embedding</td></tr>
+<tr><td>Baseline (always_1)</td><td>46.88%</td><td>Siempre local — referencia</td></tr>
+<tr><td>Mejor modelo individual</td><td>46.22% (LogReg)</td><td>Pequeña mejora con features</td></tr>
+<tr><td>Partidos validación</td><td>4210</td><td>Temporadas 2024-25</td></tr>
+</table>
+
+<h2>📰 Fuentes de Features</h2>
+<table>
+<tr><th>Feature</th><th>Fuente</th><th>Cobertura</th></tr>
+<tr><td>ELO rating</td><td>13.472 partidos históricos</td><td class="ok">100%</td></tr>
+<tr><td>stadium_capacity</td><td>Wikipedia 2025-26</td><td class="ok">28 equipos</td></tr>
+<tr><td>news_score</td><td>RSS Marca + MD + AS</td><td class="warn">7 días, parcial</td></tr>
+<tr><td>name_embedding</td><td>Sintético (nombre)</td><td class="ok">76 equipos</td></tr>
+<tr><td>budget/market_value</td><td>Wikipedia</td><td class="bad">No disponible</td></tr>
+</table>
+
+<h2>📈 Accuracy por Signo</h2>
+<table>
+<tr><th>Signo</th><th>% Real</th><th>Accuracy Ensemble</th><th>Accuracy Baseline</th></tr>
+<tr><td>H — Local</td><td>1911 (45.4%)</td><td class='bad'>99.8%</td><td>100.0%</td></tr>
+<tr><td>D — Empate</td><td>1172 (27.8%)</td><td class='ok'>0.2%</td><td>0.0%</td></tr>
+<tr><td>A — Visitante</td><td>1127 (26.8%)</td><td class='bad'>0.0%</td><td>0.0%</td></tr>
+</table>
+<p style="color:#888;font-size:0.85em">⚠️ La quiniela es extremadamente difícil de predecir mejor que el baseline.
+El mejor modelo (LogReg) solo mejora marginalmente. Los signos de visitante (A) y empate (D)
+son los que más benefician al apostante si se identifican correctamente.</p>
+
+<h2>🔬 Modelos Componentes</h2>
+<table>
+<tr><th>Modelo</th><th>Accuracy</th><th>Peso Ensemble</th></tr>
+<tr><td>ELO simple</td><td>46.11%</td><td>15% (fijo)</td></tr>
+<tr><td>Regresión Logística</td><td>46.22%</td><td>25.2%</td></tr>
+<tr><td>Poisson</td><td>45.39%</td><td>24.8%</td></tr>
+<tr><td>Dixon-Coles</td><td>45.37%</td><td>24.8%</td></tr>
+</table>
+
+<h2>⚠️ Limitaciones del Modelo</h2>
+<ul>
+<li>Budget y market_value <strong>no disponibles</strong> — Wikipedia no tiene datos estructurados</li>
+<li>Los diarios deportivos (Marca, AS, MD) tienen cobertura parcial y ruido en el lexicón</li>
+<li>El modelo no captura información de lesiones, sanciones ni alineaciones</li>
+<li>La página de Loterieapuestas.es aún no ha sido parseada para la temporada 2026-27</li>
+</ul>
+
+<h2>🎯 Recomendación para la Temporada 2026-27</h2>
+<ul>
+<li>Usar el ensemble para <strong>descartar</strong> signos donde hay consenso fuerte (>75% probabilidad para H)</li>
+<li>Buscar valor en partidos donde el modelo da alta probabilidad a D o A pero el mercado/ baseline dice H</li>
+<li>Considerar agregar datos de presupuesto desde fuentes alternativas (Capologia, Transfermarkt)</li>
+<li>Scrapear la quiniela oficial de la 76ª jornada (agosto 2026) cuando esté disponible</li>
+</ul>
+
+<p style="color:#555;font-size:0.8em;text-align:center;margin-top:40px">
+Quiniela Analyzer · {date.today()} · No hay garantía de resultados. Las apuestas deportivas son entretenimiento, no inversión.
+</p>
+</body></html>
