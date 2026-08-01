@@ -1,0 +1,27 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: ciba-resource-server
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_BASE_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:ciba-realm}
+
+keycloak:
+  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8180}
+  realm: ${KEYCLOAK_REALM:ciba-realm}
+  audience: ${RESOURCE_SERVER_AUDIENCE:calendar-api}
+
+# CTI replay cache (prevents CIBA token reuse attacks)
+cti:
+  cache:
+    max-size: 10000
+    expire-after-hours: 24
+
+logging:
+  level:
+    com.ciba: DEBUG
+    org.springframework.security: DEBUG

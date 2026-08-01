@@ -1,167 +1,142 @@
 # ciba-callagent
 
-> **AI Agent acting on behalf of a user via OpenID Connect CIBA**
+> **OpenID Connect CIBA — AI Agent acting on behalf of a user**
 
-Un agente IA (Hermes) accede a recursos del usuario (calendario, email, perfil) **sin que el usuario esté presente en una browser/app**. El flujo CIBA permite que el agente solicite acceso y el usuario apruebe desde su teléfono via push notification.
+Un agente IA (Hermes) accede a recursos del usuario (calendario, email, perfil) **sin que el usuario esté presente**. El flujo CIBA permite que el agente solicite acceso y el usuario apruebe via push notification en su teléfono.
 
 ---
 
-## Arquitectura
+## Arquitectura — 3 servicios
 
 ```
-┌──────────┐   POST /authreq     ┌──────────────────┐
-│  Agent   │ ──────────────────→  │    Keycloak      │
-│  (Hermes)│  ← auth_req_id ────  │  (IdP + CIBA)   │
-│  :7000   │                      │     :8180        │
-└────┬─────┘                      └────────┬─────────┘
-     │  poll /token                         │
-     │ ──────────────────────────────────→ │
-     │  ← access_token (tras approve) ──── │
-     │                                      │
-     │ GET /api/calendar/events             │
-     │ Authorization: Bearer <token>        │
-     │                                      │
-     ▼                                      ▼
-┌──────────────────┐               ┌─────────────────┐
-│  Spring Boot     │               │  Phone / Auth    │
-│  Resource Server │               │  App (push)      │
-│  :8080           │               │                  │
-└──────────────────┘               └──────────────────┘
+┌──────────────┐   POST /authreq        ┌────────────────┐
+│  Hermes      │ ─────────────────────→  │    Keycloak   │
+│  (AI Agent)  │   ← auth_req_id ────  │    (IdP)       │
+└──────┬───────┘   poll /token           │    :8180      │
+       │  ① ──────────────────────────→ │               │
+       │                                └──────┬────────┘
+       │  ② push notification                    │
+       │  ③ approval (authenticator app)          ▼
+       │                                ┌────────────────┐
+       │  GET /api/calendar  ④          │  Phone / Auth  │
+       │  Authorization: Bearer ***     │  App (push)    │
+       │                                └────────────────┘
+       ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     Spring Boot                                 │
+│                                                                  │
+│  ┌─────────────────────────┐    ┌─────────────────────────────┐ │
+│  │  CIBA OAuth2 Client     │    │  CIBA Resource Server        │ │
+│  │  :8081                  │    │  :8082                      │ │
+│  │                         │    │                             │ │
+│  │  POST /agent/request    │    │  GET /api/calendar/events   │ │
+│  │  GET  /agent/status/{id}│    │  GET /api/email/inbox       │ │
+│  │  POST /agent/execute/{id}│    │  GET /api/user/profile      │ │
+│  │                         │    │                             │ │
+│  │  → Keycloak CIBA authreq│    │  → valida JWT + CTI replay │ │
+│  │  → polls /token         │    │  → extrae user identity     │ │
+│  └─────────────────────────┘    └─────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Componentes
+## Servicios
 
-| Servicio | Puerto | Descripción |
+| Servicio | Puerto | Rol |
 |---|---|---|
 | `keycloak` | 8180 | IdP con CIBA habilitado |
-| `spring-boot-api` | 8080 | CIBA Client + Resource Server |
-| `agent-python` | 7000 | Agente IA FastAPI |
+| `ciba-oauth2-client` | 8081 | Inicia authreq CIBA, polls Keycloak, expone API `/agent/**` |
+| `ciba-resource-server` | 8082 | Valida JWT CIBA, sirve recursos protegidos |
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Clonar y arrancar
+cd /home/vhdez/desarrollos-hermes/ciba-callagent
 docker compose up --build
 
-# 2. Esperar a que Keycloak esté listo (~30s)
-# Verificar: http://localhost:8180/admin
+# Esperar ~30s a que Keycloak arranque
+```
 
-# 3. Probar el flujo CIBA
-curl -X POST http://localhost:7000/auth/ciba-request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "testuser",
-    "action": "read_calendar",
-    "params": {}
-  }'
-# → { "auth_req_id": "AR-xxx", "binding_message": "Read your calendar", ... }
+---
 
-# 4. Aprobar en la app de Keycloak Authenticator (o en el admin de Keycloak)
-# Polling automático del agente devuelve el token
+## El flujo completo
 
-# 5. Ejecutar la acción con el token
-curl -X POST http://localhost:7000/agent/execute/<request_id>
-# → { "success": true, "data": { "events": [...] } }
+```
+1. Hermes → ciba-oauth2-client:  POST /agent/request
+   Body: { "userId": "testuser", "action": "read_calendar" }
+   → 202 { requestId: "abc", authReqId: "AR-xxx", bindingMessage: "Read your calendar" }
+
+2. ciba-oauth2-client → Keycloak:  POST /ext/ciba/auth/authreq
+   → auth_req_id (válido 5 minutos)
+
+3. Keycloak → Teléfono:  push notification
+   "Read your calendar"
+
+4. Hermes polls:  GET /agent/status/{requestId}
+   → 200 { status: "PENDING" }  (mientras usuario decide)
+   → 200 { status: "APPROVED", accessToken: "eyJ..." }  (cuando aprueba)
+
+5. Hermes → ciba-resource-server:  GET /api/calendar/events
+   Authorization: Bearer eyJ...
+
+6. ciba-resource-server valida el token:
+   - JWT signature vs Keycloak JWKS
+   - cti claim → Caffeine cache (replay prevention)
+   - scope contiene calendar.read
+   → 200 { events: [...] }
 ```
 
 ---
 
 ## Endpoints
 
-### Agent Python (puerto 7000)
+### ciba-oauth2-client — :8081
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `POST` | `/auth/ciba-request` | Inicia flujo CIBA |
-| `GET` | `/auth/status/{request_id}` | Consulta estado (pending/approved/denied) |
-| `POST` | `/agent/execute/{request_id}` | Ejecuta acción con token CIBA |
+| `POST` | `/agent/request` | Inicia flujo CIBA |
+| `GET` | `/agent/status/{id}` | Consulta estado (PENDING/APPROVED/DENIED) |
+| `POST` | `/agent/execute/{id}` | Ejecuta acción con token CIBA |
+| `POST` | `/ciba/auth-request` | CIBA directo (test) |
+| `POST` | `/ciba/poll/{authReqId}` | Polling directo (test) |
 | `GET` | `/health` | Health check |
 
-### Spring Boot API (puerto 8080)
-
-**CIBA Client (inicia auth):**
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `POST` | `/ciba/auth-request` | Envía authreq a Keycloak |
-| `GET` | `/ciba/status/{auth_req_id}` | Estado del request |
-| `POST` | `/ciba/poll/{auth_req_id}` | Poll manual |
-| `POST` | `/ciba/ping-callback` | Callback para modo ping |
-
-**Resource Server (protege recursos):**
+### ciba-resource-server — :8082
 
 | Método | Ruta | Descripción |
 |---|---|---|
 | `GET` | `/api/calendar/events` | Eventos del calendario |
 | `GET` | `/api/calendar/events/{id}` | Un evento |
 | `GET` | `/api/calendar/calendars` | Lista de calendarios |
-| `GET` | `/api/email/messages` | Emails |
-| `GET` | `/api/email/folders` | Carpetas de email |
+| `GET` | `/api/email/inbox` | Emails |
+| `GET` | `/api/user/profile` | Perfil del usuario |
+| `GET` | `/api/user/token-info` | Info del token CIBA |
 | `GET` | `/health` | Health check |
 
 ---
 
-## El flujo CIBA paso a paso
+## CIBA Token Validation (qué hace diferente el Resource Server)
 
-```
-1. AGENTE → KEYCLOAK  POST /protocol/openid-connect/ext/ciba/auth/authreq
-   Body: { login_hint, binding_message, requested_scope }
-   → auth_req_id (válido 5 minutos)
+Los tokens CIBA incluyen claims especiales:
 
-2. KEYCLOAK → TELÉFONO  Push notification
-   "Confirm agent: Read your calendar"
+| Claim | Propósito |
+|---|---|
+| `cti` | CIBA Token Identifier — unique, used for replay prevention |
+| `auth_req_id` | ID del request de autenticación |
+| `nonce` | Protección contra replay |
 
-3. AGENTE polls  KEYCLOAK  POST /ext/ciba/auth/token
-   grant_type=urn:openid:params:grant-type:ciba&auth_req_id=AR-xxx
-   → 400 { error: "authorization_pending" }  (mientras usuario decide)
-   → 200 { access_token, id_token, expires_in }  (cuando aprueba)
-
-4. AGENTE → SPRING BOOT  GET /api/calendar/events
-   Authorization: Bearer <access_token>
-
-5. SPRING BOOT valida el token:
-   - JWT signature vs Keycloak JWKS
-   - cti claim presente y único (replay prevention)
-   - audiencia incluye calendar-api
-   - scope contiene calendar.read
-
-6. SPRING BOOT → AGENTE  200 { events: [...] }
-```
-
----
-
-## Validación CIBA (qué hace diferente)
-
-Los tokens CIBA de Keycloak incluyen claims especiales que el Resource Server **debe** validar:
-
-```
-cti          — CIBA Token Identifier (replay prevention)
-auth_req_id  — ID del request de autenticación
-nonce        — Protección contra replay
-```
-
-El `CibaTokenValidator` de Spring Boot:
-1. Decodifica el JWT contra JWKS de Keycloak
-2. Verifica expiry, issuer, audience
-3. **Impide reuse del cti** (Caffeine cache con TTL 24h)
-4. Confirma presencia de `auth_req_id` y `cti`
-
----
-
-## Modos CIBA
-
-| Modo | Cómo funciona | Configuración |
-|---|---|---|
-| **poll** (default) | El agente pregunta cada N segundos | `keycloak.ciba-client.mode=poll` |
-| **ping** | Keycloak llama a un callback URL cuando el usuario aprueba | `keycloak.ciba-client.mode=ping` + `backchannel-client-uri` |
+El `CibaTokenValidator` del Resource Server:
+1. Decodifica JWT contra JWKS de Keycloak
+2. **Verifica `cti`** → Caffeine cache marca como usado (replay = 401)
+3. Confirma presencia de `auth_req_id`
+4. Valida scope requerido (`calendar.read`, etc.)
 
 ---
 
 ## Credenciales de test
 
-| Servicio | Usuario | Contraseña |
+| | Usuario | Contraseña |
 |---|---|---|
 | Keycloak Admin | `admin` | `admin` |
 | Test User | `testuser` | `testuser` |
@@ -169,32 +144,76 @@ El `CibaTokenValidator` de Spring Boot:
 
 ---
 
-## Desarrollo local (sin Docker)
+## Ejemplo de uso
 
 ```bash
-# Terminal 1: Keycloak
-docker run -p 8180:8080 \
-  -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin \
-  quay.io/keycloak/keycloak:26.0 start-dev --import-realm
+# 1. Iniciar flujo CIBA
+curl -X POST http://localhost:8081/agent/request \
+  -H "Content-Type: application/json" \
+  -d '{"userId":"testuser","action":"read_calendar"}'
 
-# Terminal 2: Spring Boot
-cd spring-boot-api && ./mvnw spring-boot:run
+# 2. Poll hasta APPROVED (aprobar en la app de Keycloak Authenticator)
+curl http://localhost:8081/agent/status/<requestId>
 
-# Terminal 3: Agent Python
-cd agent-python && pip install -r requirements.txt && python app.py
+# 3. Cuando approved, ejecutar
+curl -X POST http://localhost:8081/agent/execute/<requestId>
+
+# 4. Con el token en el header, llamar directo al Resource Server
+curl http://localhost:8082/api/calendar/events \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
 
-## Configuración
+## Estructura del proyecto
 
-Variables de entorno (o `.env`):
-
-```bash
-KEYCLOAK_BASE_URL=http://localhost:8180
-KEYCLOAK_REALM=ciba-realm
-CIBA_CLIENT_ID=ciba-agent
-CIBA_CLIENT_SECRET=ciba-agent-secret
-CIBA_MODE=poll
-SPRING_BOOT_API_URL=http://localhost:8080
+```
+ciba-callagent/
+├── pom.xml                        # Parent POM (ciba-oauth2-client + ciba-resource-server)
+├── docker-compose.yml
+├── README.md
+│
+├── ciba-oauth2-client/            # ─── CIBA OAuth2 Client ───
+│   ├── Dockerfile
+│   ├── pom.xml
+│   └── src/main/java/com/ciba/client/
+│       ├── CibaClientApplication.java
+│       ├── config/
+│       │   ├── SecurityConfig.java
+│       │   ├── CibaProperties.java
+│       │   ├── AgentApiKeyFilter.java
+│       │   └── WebClientConfig.java
+│       ├── controller/
+│       │   ├── CibaClientController.java  # /ciba/**
+│       │   ├── AgentController.java       # /agent/**
+│       │   └── PingCallbackController.java
+│       ├── dto/
+│       │   └── CibaClientDtos.java
+│       └── service/
+│           ├── CibaClientService.java    # WebClient → Keycloak CIBA
+│           └── AgentOrchestrator.java     # state machine + RS calls
+│
+├── ciba-resource-server/          # ─── CIBA Resource Server ───
+│   ├── Dockerfile
+│   ├── pom.xml
+│   └── src/main/java/com/ciba/resource/
+│       ├── CibaResourceServerApplication.java
+│       ├── config/
+│       │   ├── SecurityConfig.java
+│       │   ├── CtiReplayCache.java       # CTI replay prevention
+│       │   └── CibaJwtAuthenticationConverter.java
+│       ├── security/
+│       │   ├── CibaTokenValidator.java   # CTI + scope validation
+│       │   └── JwtClaimsExtractor.java
+│       └── controller/
+│           ├── CalendarController.java
+│           ├── EmailController.java
+│           ├── UserController.java
+│           └── HealthController.java
+│
+├── keycloak/
+│   ├── ciba-realm.json            # Realm export con CIBAenabled
+│   └── import-realm.sh
+└── docs/html/
+    └── ciba-flow.html              # Visualizador HTML interactivo
 ```

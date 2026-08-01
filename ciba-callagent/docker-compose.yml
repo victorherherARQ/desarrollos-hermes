@@ -1,6 +1,9 @@
 version: "3.9"
 
 services:
+  # ─────────────────────────────────────────────────────────────────
+  # Keycloak 26 — IdP with CIBA extension enabled
+  # ─────────────────────────────────────────────────────────────────
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     container_name: ciba-keycloak
@@ -24,26 +27,29 @@ services:
     networks:
       - ciba-network
 
-  spring-boot-api:
+  # ─────────────────────────────────────────────────────────────────
+  # CIBA OAuth2 Client — initiates CIBA auth, polls Keycloak,
+  # exposes /agent/** API for the AI agent (Hermes)
+  # ─────────────────────────────────────────────────────────────────
+  ciba-oauth2-client:
     build:
-      context: ./spring-boot-api
+      context: ./ciba-oauth2-client
       dockerfile: Dockerfile
-    container_name: ciba-spring-api
+    container_name: ciba-oauth2-client
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
-      - SPRING_BOOT_API_URL=http://localhost:8080
-      - KEYCLOAK_BASE_URL=http://keycloak:8080
-      - KEYCLOAK_REALM=ciba-realm
-      - KEYCLOAK_CLIENT_ID=calendar-api
-      - KEYCLOAK_CLIENT_SECRET=calendar-api-secret
-    env_file:
-      - .env
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ciba-realm
+      CIBA_CLIENT_ID: ciba-agent
+      CIBA_CLIENT_SECRET: ciba-agent-secret
+      RESOURCE_SERVER_URL: http://ciba-resource-server:8082
+      AGENT_API_KEY: ${AGENT_API_KEY:-dev-api-key}
     depends_on:
       keycloak:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -51,40 +57,38 @@ services:
     networks:
       - ciba-network
 
-  agent-python:
+  # ─────────────────────────────────────────────────────────────────
+  # CIBA Resource Server — validates CIBA JWTs, enforces CTI replay
+  # prevention, serves protected user resources
+  # ─────────────────────────────────────────────────────────────────
+  ciba-resource-server:
     build:
-      context: ./agent-python
+      context: ./ciba-resource-server
       dockerfile: Dockerfile
-    container_name: ciba-agent
+    container_name: ciba-resource-server
     ports:
-      - "7000:7000"
+      - "8082:8082"
     environment:
-      - KEYCLOAK_BASE_URL=http://keycloak:8080
-      - KEYCLOAK_REALM=ciba-realm
-      - CIBA_CLIENT_ID=ciba-agent
-      - CIBA_CLIENT_SECRET=ciba-agent-secret
-      - CIBA_MODE=poll
-      - SPRING_BOOT_API_URL=http://spring-boot-api:8080
-    env_file:
-      - .env
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ciba-realm
+      RESOURCE_SERVER_AUDIENCE: calendar-api
     depends_on:
-      spring-boot-api:
-        condition: service_healthy
       keycloak:
         condition: service_healthy
+      ciba-oauth2-client:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8082/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 10s
+      retries: 10
+      start_period: 30s
     networks:
       - ciba-network
-
-volumes:
-  keycloak_data:
-    driver: local
 
 networks:
   ciba-network:
     driver: bridge
+
+volumes:
+  keycloak_data:
