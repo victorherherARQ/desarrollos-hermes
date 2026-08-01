@@ -22,8 +22,9 @@ public class AgentApiKeyFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
                                     FilterChain chain) throws ServletException, IOException {
         String path = req.getRequestURI();
-        // Skip health endpoints
-        if (path.equals("/health") || path.startsWith("/actuator")) {
+        // Skip health endpoints and public info
+        if (path.equals("/health") || path.startsWith("/actuator")
+                || path.equals("/ciba/client-info")) {
             chain.doFilter(req, res);
             return;
         }
