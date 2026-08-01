@@ -18,6 +18,7 @@
     "id_token_hint",
     "login_hint"
   ],
+
   "clients": [
     {
       "clientId": "ciba-agent",
@@ -34,12 +35,12 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "redirectUris": [
-        "http://localhost:8080/*",
-        "http://localhost:3000/*"
+        "http://localhost:8081/*",
+        "http://localhost:8082/*"
       ],
       "webOrigins": [
-        "http://localhost:8080",
-        "http://localhost:3000"
+        "http://localhost:8081",
+        "http://localhost:8082"
       ],
       "defaultClientScopes": [
         "openid",
@@ -48,7 +49,9 @@
       ],
       "optionalClientScopes": [
         "calendar.read",
-        "ciba"
+        "calendar.write",
+        "email.send",
+        "email.modify"
       ],
       "attributes": {
         "ciba.mode": "poll",
@@ -60,7 +63,7 @@
     {
       "clientId": "calendar-api",
       "name": "Calendar API Resource Server",
-      "description": "OAuth2 resource server for calendar access",
+      "description": "OAuth2 resource server — validates CIBA tokens",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "calendar-api-secret",
@@ -72,10 +75,10 @@
       "authorizationServicesEnabled": false,
       "fullScopeAllowed": true,
       "redirectUris": [
-        "http://localhost:8080/*"
+        "http://localhost:8082/*"
       ],
       "webOrigins": [
-        "http://localhost:8080"
+        "http://localhost:8082"
       ],
       "publicClient": false,
       "protocol": "openid-connect",
@@ -85,10 +88,132 @@
         "email"
       ],
       "optionalClientScopes": [
-        "calendar.read"
+        "calendar.read",
+        "calendar.write",
+        "email.send",
+        "email.modify"
       ]
     }
   ],
+
+  "clientScopes": [
+    {
+      "name": "openid",
+      "description": "OpenID Connect scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "profile",
+      "description": "User profile information",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "email",
+      "description": "User email",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "calendar.read",
+      "description": "Read calendar events",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "calendar-api-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "calendar-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "calendar.write",
+      "description": "Create/update calendar events",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "calendar-api-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "calendar-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email.send",
+      "description": "Send emails on behalf of the user",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "calendar-api-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "calendar-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email.modify",
+      "description": "Modify email labels and folders",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "calendar-api-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "calendar-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
   "scopes": [
     {
       "name": "openid",
@@ -127,8 +252,26 @@
       }
     },
     {
-      "name": "ciba",
-      "description": "CIBA scope for backchannel authentication",
+      "name": "calendar.write",
+      "description": "Create/update calendar events",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "email.send",
+      "description": "Send emails on behalf of the user",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "email.modify",
+      "description": "Modify email labels and folders",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -136,6 +279,7 @@
       }
     }
   ],
+
   "users": [
     {
       "username": "testuser",
@@ -157,6 +301,7 @@
       }
     }
   ],
+
   "roles": {
     "realm": [
       {

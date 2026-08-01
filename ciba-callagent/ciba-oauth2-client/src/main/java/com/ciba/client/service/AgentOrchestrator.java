@@ -188,9 +188,9 @@ public class AgentOrchestrator {
 
     private Object callResourceServer(RequestState state) {
         String endpoint = switch (state.action) {
-            case "read_calendar", "list_events" -> "/api/calendar/events";
-            case "read_emails" -> "/api/email/inbox";
-            case "get_profile" -> "/api/user/profile";
+            case "calendar_list", "calendar_create", "calendar_update" -> "/api/calendar/events";
+            case "email_list", "email_send", "email_modify" -> "/api/email/inbox";
+            case "profile" -> "/api/user/profile";
             case "token_info" -> "/api/user/token-info";
             default -> null;
         };
@@ -222,27 +222,40 @@ public class AgentOrchestrator {
 
     private String actionToScope(String action) {
         return switch (action) {
-            case "read_calendar", "list_events" -> "openid profile email calendar.read";
-            case "read_emails" -> "openid profile email";
-            case "get_profile", "token_info" -> "openid profile email";
-            default -> "openid profile email";
+            // Calendar
+            case "calendar_list"    -> "openid profile email calendar.read";
+            case "calendar_create"  -> "openid profile email calendar.write";
+            case "calendar_update"  -> "openid profile email calendar.write";
+            // Email
+            case "email_list"       -> "openid profile email";
+            case "email_send"       -> "openid profile email email.send";
+            case "email_modify"     -> "openid profile email email.modify";
+            // Profile
+            case "profile"          -> "openid profile email";
+            case "token_info"       -> "openid profile email";
+            default                 -> "openid profile email";
         };
     }
 
     private String actionToBindingMessage(String action) {
         return switch (action) {
-            case "read_calendar" -> "Read your calendar";
-            case "list_events"   -> "List your calendar events";
-            case "read_emails"  -> "Read your emails";
-            case "get_profile"  -> "Access your profile";
-            case "token_info"   -> "View session information";
-            default             -> "Authorize: " + action;
+            case "calendar_list"   -> "Read your calendar";
+            case "calendar_create" -> "Create a calendar event";
+            case "calendar_update" -> "Update a calendar event";
+            case "email_list"      -> "Read your emails";
+            case "email_send"      -> "Send an email";
+            case "email_modify"    -> "Modify your email";
+            case "profile"         -> "Access your profile";
+            case "token_info"      -> "View session information";
+            default                -> "Authorize: " + action;
         };
     }
 
     private void validateAction(String action) {
         Set<String> valid = Set.of(
-            "read_calendar", "list_events", "read_emails", "get_profile", "token_info"
+            "calendar_list", "calendar_create", "calendar_update",
+            "email_list", "email_send", "email_modify",
+            "profile", "token_info"
         );
         if (!valid.contains(action)) {
             throw new IllegalArgumentException(
