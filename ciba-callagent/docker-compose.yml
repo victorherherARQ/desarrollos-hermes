@@ -1,11 +1,9 @@
-version: "3.9"
-
 services:
   # ─────────────────────────────────────────────────────────────────
   # Keycloak 26 — IdP with CIBA extension enabled
   # ─────────────────────────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: quay.io/keycloak/keycloak:26.6
     container_name: ciba-keycloak
     command: start-dev --import-realm
     environment:
@@ -13,13 +11,13 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HTTP_PORT: 8080
       KC_HTTPS_ENABLED: "false"
+      KC_DB: dev-mem
     ports:
-      - "8180:8080"
+      - "8181:8080"
     volumes:
-      - ./keycloak/ciba-realm.json:/opt/keycloak/data/import/ciba-realm.json:ro
-      - keycloak_data:/opt/keycloak/data
+      - ./keycloak/ciba-realm-realm.json:/opt/keycloak/data/import/ciba-realm-realm.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8080/q/health/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -47,9 +45,9 @@ services:
       AGENT_API_KEY: ${AGENT_API_KEY:-dev-api-key}
     depends_on:
       keycloak:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -74,11 +72,11 @@ services:
       RESOURCE_SERVER_AUDIENCE: calendar-api
     depends_on:
       keycloak:
-        condition: service_healthy
+        condition: service_started
       ciba-oauth2-client:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8082/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -89,6 +87,3 @@ services:
 networks:
   ciba-network:
     driver: bridge
-
-volumes:
-  keycloak_data:

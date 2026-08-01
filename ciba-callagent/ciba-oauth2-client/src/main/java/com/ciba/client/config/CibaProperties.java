@@ -10,6 +10,18 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "keycloak.ciba")
 public class CibaProperties {
+    /** Keycloak base URL (e.g., http://localhost:8181) */
+    private String baseUrl = "http://localhost:8181";
+
+    /** Keycloak realm name (e.g., ciba-realm) */
+    private String realm = "ciba-realm";
+
+    /** CIBA client ID */
+    private String clientId = "ciba-agent";
+
+    /** CIBA client secret */
+    private String clientSecret = "ciba-agent-secret";
+
     /** poll | ping */
     private String mode = "poll";
     private int pollIntervalSeconds = 3;

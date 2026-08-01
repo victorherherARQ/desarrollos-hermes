@@ -8,10 +8,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_BASE_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:ciba-realm}
+          issuer-uri: ${KEYCLOAK_BASE_URL:http://localhost:8181}/realms/${KEYCLOAK_REALM:ciba-realm}
 
 keycloak:
-  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8180}
+  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8181}
   realm: ${KEYCLOAK_REALM:ciba-realm}
   audience: ${RESOURCE_SERVER_AUDIENCE:calendar-api}
 

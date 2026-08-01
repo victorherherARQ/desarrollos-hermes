@@ -46,7 +46,7 @@ public class AgentOrchestrator {
 
         log.info("[{}] CIBA initiate: userId={}, action={}, scope={}", requestId, userId, action, scope);
 
-        AuthReqResult authResult;
+        CibaClientService.AuthReqResult authResult;
         try {
             authResult = cibaClientService.initiateAuthRequest(userId, bindingMessage, scope);
         } catch (CibaClientService.CibaException e) {
@@ -64,7 +64,7 @@ public class AgentOrchestrator {
             Instant.now(),
             Instant.now().plusSeconds(authResult.expiresIn()),
             AuthState.PENDING,
-            null, null
+            null, null, authResult.expiresIn()
         ));
 
         return AgentRequestResponse.builder()
@@ -87,21 +87,21 @@ public class AgentOrchestrator {
             throw new IllegalArgumentException("Request not found: " + requestId);
         }
 
-        if (state.state == AuthState.DENIED) {
+        if (state.getState() == AuthState.DENIED) {
             return buildStatus(state, null);
         }
 
-        if (state.state == AuthState.APPROVED) {
-            return buildStatus(state, state.accessToken);
+        if (state.getState() == AuthState.APPROVED) {
+            return buildStatus(state, state.getAccessToken());
         }
 
         // Poll Keycloak
         try {
-            CibaClientService.CibaTokenResult token = cibaClientService.pollToken(state.authReqId);
-            state.state = AuthState.APPROVED;
-            state.accessToken = token.accessToken();
-            state.idToken = token.idToken();
-            state.expiresIn = token.expiresIn();
+            CibaClientService.CibaTokenResult token = cibaClientService.pollToken(state.getAuthReqId());
+            state.setState(AuthState.APPROVED);
+            state.setAccessToken(token.accessToken());
+            state.setIdToken(token.idToken());
+            state.setExpiresIn(token.expiresIn());
             log.info("[{}] CIBA approved: sub extraction pending from id_token", requestId);
             return buildStatus(state, token.accessToken());
 
@@ -109,19 +109,19 @@ public class AgentOrchestrator {
             return buildStatus(state, null);
 
         } catch (CibaClientService.AccessDeniedException e) {
-            state.state = AuthState.DENIED;
+            state.setState(AuthState.DENIED);
             return buildStatus(state, null);
 
         } catch (CibaClientService.ExpiredTokenException e) {
-            state.state = AuthState.EXPIRED;
+            state.setState(AuthState.EXPIRED);
             return buildStatus(state, null);
 
         } catch (CibaClientService.CibaException e) {
-            state.state = AuthState.ERROR;
+            state.setState(AuthState.ERROR);
             return StatusResponse.builder()
                 .requestId(requestId)
                 .status("ERROR")
-                .userId(state.userId)
+                .userId(state.getUserId())
                 .error(e.getMessage())
                 .build();
         }
@@ -136,38 +136,38 @@ public class AgentOrchestrator {
             throw new IllegalArgumentException("Request not found: " + requestId);
         }
 
-        if (state.state != AuthState.APPROVED) {
+        if (state.getState() != AuthState.APPROVED) {
             return ExecuteResponse.builder()
                 .success(false)
                 .requestId(requestId)
-                .userId(state.userId)
-                .action(state.action)
-                .error("Request not approved. Current status: " + state.state.name())
+                .userId(state.getUserId())
+                .action(state.getAction())
+                .error("Request not approved. Current status: " + state.getState().name())
                 .build();
         }
 
-        if (state.accessToken == null) {
+        if (state.getAccessToken() == null) {
             return ExecuteResponse.builder()
                 .success(false)
                 .requestId(requestId)
-                .userId(state.userId)
-                .action(state.action)
+                .userId(state.getUserId())
+                .action(state.getAction())
                 .error("No access token available")
                 .build();
         }
 
-        log.info("[{}] Executing action={} with CIBA token for user={}", requestId, state.action, state.userId);
+        log.info("[{}] Executing action={} with CIBA token for user={}", requestId, state.getAction(), state.getUserId());
 
         // Call Resource Server with the CIBA access_token
         Object data = callResourceServer(state);
 
-        state.state = AuthState.COMPLETED;
+        state.setState(AuthState.COMPLETED);
 
         return ExecuteResponse.builder()
             .success(true)
             .requestId(requestId)
-            .userId(state.userId)
-            .action(state.action)
+            .userId(state.getUserId())
+            .action(state.getAction())
             .data(data)
             .executedAt(Instant.now())
             .build();
@@ -177,17 +177,17 @@ public class AgentOrchestrator {
 
     private StatusResponse buildStatus(RequestState s, String accessToken) {
         return StatusResponse.builder()
-            .requestId(s.requestId)
-            .status(s.state.name())
-            .userId(s.userId)
-            .bindingMessage(s.bindingMessage)
+            .requestId(s.getRequestId())
+            .status(s.getState().name())
+            .userId(s.getUserId())
+            .bindingMessage(s.getBindingMessage())
             .accessToken(accessToken)
-            .expiresIn(s.expiresIn != null ? s.expiresIn : 0)
+            .expiresIn(s.getExpiresIn() != null ? s.getExpiresIn() : 0)
             .build();
     }
 
     private Object callResourceServer(RequestState state) {
-        String endpoint = switch (state.action) {
+        String endpoint = switch (state.getAction()) {
             case "calendar_list", "calendar_create", "calendar_update" -> "/api/calendar/events";
             case "email_list", "email_send", "email_modify" -> "/api/email/inbox";
             case "profile" -> "/api/user/profile";
@@ -196,26 +196,26 @@ public class AgentOrchestrator {
         };
 
         if (endpoint == null) {
-            return Map.of("error", "Action not implemented: " + state.action);
+            return Map.of("error", "Action not implemented: " + state.getAction());
         }
 
         try {
             // In production: use WebClient with the actual Resource Server URL
             // For now: return mock data demonstrating the pattern
             return Map.of(
-                "userId", state.userId,
-                "action", state.action,
-                "scope", state.scope,
+                "userId", state.getUserId(),
+                "action", state.getAction(),
+                "scope", state.getScope(),
                 "endpoint", endpoint,
                 "_note", "In production, call Resource Server at http://ciba-resource-server:8080" + endpoint,
-                "_accessTokenReceived", state.accessToken != null,
+                "_accessTokenReceived", state.getAccessToken() != null,
                 "events", List.of(
                     Map.of("id", "evt1", "summary", "Meeting with team", "start", "2026-08-02T10:00:00Z"),
                     Map.of("id", "evt2", "summary", "Sprint review", "start", "2026-08-03T15:00:00Z")
                 )
             );
         } catch (Exception e) {
-            log.error("[{}] Resource Server call failed: {}", state.requestId, e.getMessage());
+            log.error("[{}] Resource Server call failed: {}", state.getRequestId(), e.getMessage());
             return Map.of("error", "Resource Server unavailable: " + e.getMessage());
         }
     }
@@ -263,23 +263,72 @@ public class AgentOrchestrator {
         }
     }
 
-    // ── State record ────────────────────────────────────────────────────
+    // ── Mutable State class (replaces record to allow field mutation) ───
 
-    private record RequestState(
-        String requestId,
-        String authReqId,
-        String userId,
-        String action,
-        String scope,
-        String bindingMessage,
-        Map<String, Object> params,
-        Instant createdAt,
-        Instant expiresAt,
-        AuthState state,
-        String accessToken,
-        String idToken,
-        Integer expiresIn
-    ) {}
+    private static class RequestState {
+        private String requestId;
+        private String authReqId;
+        private String userId;
+        private String action;
+        private String scope;
+        private String bindingMessage;
+        private Map<String, Object> params;
+        private Instant createdAt;
+        private Instant expiresAt;
+        private AuthState state;
+        private String accessToken;
+        private String idToken;
+        private Integer expiresIn;
+
+        RequestState(String requestId, String authReqId, String userId, String action,
+                      String scope, String bindingMessage, Map<String, Object> params,
+                      Instant createdAt, Instant expiresAt, AuthState state,
+                      String accessToken, String idToken, Integer expiresIn) {
+            this.requestId = requestId;
+            this.authReqId = authReqId;
+            this.userId = userId;
+            this.action = action;
+            this.scope = scope;
+            this.bindingMessage = bindingMessage;
+            this.params = params;
+            this.createdAt = createdAt;
+            this.expiresAt = expiresAt;
+            this.state = state;
+            this.accessToken = accessToken;
+            this.idToken = idToken;
+            this.expiresIn = expiresIn;
+        }
+
+        // Getters
+        String getRequestId() { return requestId; }
+        String getAuthReqId() { return authReqId; }
+        String getUserId() { return userId; }
+        String getAction() { return action; }
+        String getScope() { return scope; }
+        String getBindingMessage() { return bindingMessage; }
+        Map<String, Object> getParams() { return params; }
+        Instant getCreatedAt() { return createdAt; }
+        Instant getExpiresAt() { return expiresAt; }
+        AuthState getState() { return state; }
+        String getAccessToken() { return accessToken; }
+        String getIdToken() { return idToken; }
+        Integer getExpiresIn() { return expiresIn; }
+
+        // Setters
+        void setRequestId(String requestId) { this.requestId = requestId; }
+        void setAuthReqId(String authReqId) { this.authReqId = authReqId; }
+        void setUserId(String userId) { this.userId = userId; }
+        void setAction(String action) { this.action = action; }
+        void setScope(String scope) { this.scope = scope; }
+        void setBindingMessage(String bindingMessage) { this.bindingMessage = bindingMessage; }
+        void setParams(Map<String, Object> params) { this.params = params; }
+        void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+        void setExpiresAt(Instant expiresAt) { this.expiresAt = expiresAt; }
+        void setState(AuthState state) { this.state = state; }
+        void setAccessToken(String accessToken) { this.accessToken = accessToken; }
+        void setIdToken(String idToken) { this.idToken = idToken; }
+        void setExpiresIn(Integer expiresIn) { this.expiresIn = expiresIn; }
+    }
 
     private enum AuthState {
         PENDING, APPROVED, DENIED, EXPIRED, COMPLETED, ERROR

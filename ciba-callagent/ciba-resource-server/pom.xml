@@ -5,13 +5,16 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.ciba</groupId>
-        <artifactId>ciba-parent</artifactId>
-        <version>1.0.0</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
     </parent>
 
+    <groupId>com.ciba</groupId>
     <artifactId>ciba-resource-server</artifactId>
     <packaging>jar</packaging>
+    <version>1.0.0</version>
     <name>CIBA Resource Server</name>
     <description>Validates CIBA access_tokens, enforces cti replay prevention, serves protected user resources (calendar, email, profile).</description>
 

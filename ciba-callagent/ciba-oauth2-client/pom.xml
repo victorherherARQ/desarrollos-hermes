@@ -5,13 +5,16 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.ciba</groupId>
-        <artifactId>ciba-parent</artifactId>
-        <version>1.0.0</version>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
     </parent>
 
+    <groupId>com.ciba</groupId>
     <artifactId>ciba-oauth2-client</artifactId>
     <packaging>jar</packaging>
+    <version>1.0.0</version>
     <name>CIBA OAuth2 Client</name>
     <description>CIBA-initiating client: sends authreq to Keycloak, polls for token, exposes /agent/** API for the AI agent.</description>
 

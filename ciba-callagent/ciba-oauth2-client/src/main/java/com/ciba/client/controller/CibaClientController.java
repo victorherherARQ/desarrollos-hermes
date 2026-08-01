@@ -1,13 +1,15 @@
 package com.ciba.client.controller;
 
 import com.ciba.client.dto.CibaClientDtos.*;
+import com.ciba.client.service.CibaClientService;
 import com.ciba.client.service.CibaClientService.*;
-import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping
@@ -51,22 +53,6 @@ public class CibaClientController {
                 .body(Map.of("status", "EXPIRED", "message", "CIBA request expired"));
         } catch (CibaException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, e.getMessage());
-        }
-    }
-
-    /** POST /ciba/ping-callback — ping mode callback from Keycloak */
-    @PostMapping("/ciba/ping-callback")
-    public ResponseEntity<?> pingCallback(@RequestBody JsonNode payload) {
-        try {
-            var result = cibaClientService.handlePingCallback(payload);
-            return ResponseEntity.ok(Map.of(
-                "status", "OK",
-                "authReqId", result.authReqId(),
-                "message", "Token received via ping"
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                .body(Map.of("error", e.getMessage()));
         }
     }
 

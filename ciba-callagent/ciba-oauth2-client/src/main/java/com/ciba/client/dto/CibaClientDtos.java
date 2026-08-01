@@ -37,6 +37,8 @@ public class CibaClientDtos {
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private String accessToken;     // only set when APPROVED
         private int expiresIn;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private String error;
     }
 
     // ==== Outgoing: POST /agent/execute/{id} ====
@@ -62,11 +64,6 @@ public class CibaClientDtos {
     }
 
     // ==== Internal: polling result from Keycloak ====
-    public record CibaTokenResult(
-        String accessToken,
-        String idToken,
-        String tokenType,
-        int expiresIn,
-        String scope
-    ) {}
+    // NOTE: CibaTokenResult is now defined as a nested record in CibaClientService
+    // This record is kept here for reference but CibaClientService defines its own CibaTokenResult
 }

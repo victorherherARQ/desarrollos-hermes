@@ -8,16 +8,6 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": false,
-  "CIBAEnabled": true,
-  "backchannelTokenDeliveryMode": "poll",
-  "backchannelAuthRequestSigningAlg": "PS256",
-  "backchannelClientNotificationEndpoint": "",
-  "backchannelUserParameter": "user_code",
-  "expiresIn": 300,
-  "authRequestedParameter": [
-    "id_token_hint",
-    "login_hint"
-  ],
 
   "clients": [
     {
@@ -214,72 +204,6 @@
     }
   ],
 
-  "scopes": [
-    {
-      "name": "openid",
-      "description": "OpenID Connect scope",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "profile",
-      "description": "User profile information",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "email",
-      "description": "User email",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "calendar.read",
-      "description": "Read calendar events",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "calendar.write",
-      "description": "Create/update calendar events",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "email.send",
-      "description": "Send emails on behalf of the user",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    },
-    {
-      "name": "email.modify",
-      "description": "Modify email labels and folders",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "true",
-        "display.on.consent.screen": "true"
-      }
-    }
-  ],
-
   "users": [
     {
       "username": "testuser",
@@ -295,10 +219,7 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["user"],
-      "clientRoles": {
-        "calendar-api": ["user"]
-      }
+      "realmRoles": ["user"]
     }
   ],
 

@@ -4,32 +4,26 @@ server:
 spring:
   application:
     name: ciba-oauth2-client
-  security:
-    oauth2:
-      client:
-        provider:
-          keycloak:
-            issuer-uri: ${KEYCLOAK_BASE_URL}/realms/${KEYCLOAK_REALM:ciba-realm}
-        registration:
-          ciba-client:
-            provider: keycloak
-            client-id: ${CIBA_CLIENT_ID:ciba-agent}
-            client-secret: ${CIBA_CLIENT_SECRET:ciba-agent-secret}
-            authorization-grant-type: urn:openid:params:grant-type:ciba
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
 
 keycloak:
-  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8180}
-  realm: ${KEYCLOAK_REALM:ciba-realm}
-  client-id: ${CIBA_CLIENT_ID:ciba-agent}
-  client-secret: ${CIBA_CLIENT_SECRET:ciba-agent-secret}
   ciba:
-    mode: poll          # poll | ping
+    base-url: ${KEYCLOAK_BASE_URL:http://localhost:8181}
+    realm: ${KEYCLOAK_REALM:ciba-realm}
+    client-id: ${CIBA_CLIENT_ID:ciba-agent}
+    client-secret: ${CIBA_CLIENT_SECRET:ciba-agent-secret}
+    mode: poll
     poll-interval-seconds: 3
     max-poll-attempts: 60
     signing-alg: PS256
 
+resource-server:
+  url: ${RESOURCE_SERVER_URL:http://ciba-resource-server:8082}
+
 agent:
-  api-key: ${AGENT_API_KEY:dev-api-key-change-in-prod}
+  apikey: changeme
 
 logging:
   level:

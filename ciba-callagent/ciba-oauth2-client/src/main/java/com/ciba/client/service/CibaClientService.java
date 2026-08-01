@@ -1,7 +1,6 @@
 package com.ciba.client.service;
 
 import com.ciba.client.config.CibaProperties;
-import com.ciba.client.dto.CibaClientDtos.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -96,7 +95,17 @@ public class CibaClientService {
         }
     }
 
-    // ── Ping callback (called by Keycloak) ────────────────────────────────
+    // ── Nested record: token result ─────────────────────────────────────
+
+    public record CibaTokenResult(
+        String accessToken,
+        String idToken,
+        String tokenType,
+        int expiresIn,
+        String scope
+    ) {}
+
+    // ── Ping callback (called by Keycloak) ───────────────────────────────
 
     /** POST /ciba/ping-callback — called by Keycloak when user approves (ping mode) */
     public record PingResult(String authReqId, String accessToken) {}
@@ -126,7 +135,7 @@ public class CibaClientService {
         public CibaException(String msg) { super(msg); }
     }
 
-    // ── Private helpers ────────────────────────────────────────────────────
+    // ── Private helpers ───────────────────────────────────────────────────
 
     private String keycloakUrl(String path) {
         return cibaProps.getBaseUrl() + "/realms/" + cibaProps.getRealm() + path;
