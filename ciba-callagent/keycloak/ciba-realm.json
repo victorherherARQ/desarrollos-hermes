@@ -1,0 +1,174 @@
+{
+  "realm": "ciba-realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "CIBAEnabled": true,
+  "backchannelTokenDeliveryMode": "poll",
+  "backchannelAuthRequestSigningAlg": "PS256",
+  "backchannelClientNotificationEndpoint": "",
+  "backchannelUserParameter": "user_code",
+  "expiresIn": 300,
+  "authRequestedParameter": [
+    "id_token_hint",
+    "login_hint"
+  ],
+  "clients": [
+    {
+      "clientId": "ciba-agent",
+      "name": "CIBA Agent Client",
+      "description": "CIBA-enabled client for the AI agent",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ciba-agent-secret",
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:3000"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "calendar.read",
+        "ciba"
+      ],
+      "attributes": {
+        "ciba.mode": "poll",
+        "ciba.backchannelAuthenticationRequestSigningAlg": "PS256",
+        "ciba.backchannelClientNotificationEndpoint": "",
+        "oidc.ciba.interval": "5"
+      }
+    },
+    {
+      "clientId": "calendar-api",
+      "name": "Calendar API Resource Server",
+      "description": "OAuth2 resource server for calendar access",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "calendar-api-secret",
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080"
+      ],
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "calendar.read"
+      ]
+    }
+  ],
+  "scopes": [
+    {
+      "name": "openid",
+      "description": "OpenID Connect scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "profile",
+      "description": "User profile information",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "email",
+      "description": "User email",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "calendar.read",
+      "description": "Read calendar events",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    },
+    {
+      "name": "ciba",
+      "description": "CIBA scope for backchannel authentication",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "testuser",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testuser@example.com",
+      "firstName": "Test",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "testuser",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["user"],
+      "clientRoles": {
+        "calendar-api": ["user"]
+      }
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "user",
+        "description": "Standard user role",
+        "composite": false
+      },
+      {
+        "name": "admin",
+        "description": "Administrator role",
+        "composite": false
+      }
+    ]
+  }
+}

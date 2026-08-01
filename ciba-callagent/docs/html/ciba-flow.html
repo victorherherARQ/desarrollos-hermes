@@ -1,0 +1,1587 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CIBA Flow Studio · ciba-callagent</title>
+  <style>
+:root{
+  --bg:#0a0a0b;--bg-2:#111114;--bg-3:#15151a;--bg-elev:#1b1b22;--border:#26262e;--border-strong:#3a3a45;
+  --text:#e7e7ea;--text-dim:#a1a1aa;--text-mute:#6b6b75;
+  --accent:#7e83ff;--accent-2:#5eead4;--warn:#f59e0b;--danger:#ef4444;--ok:#10b981;
+  --user-color:#4ade80;--client-color:#7e83ff;--keycloak-color:#fb923c;--device-color:#c084fc;--resource-color:#5eead4;
+  --actor-bg:#111114;--actor-bg-active:#1e1e26;--lifeline:#2a2a33;--lifeline-active:#4a4a55;
+  --msg-strong:#e7e7ea;--msg-dim:#8b8b95;--msg-return:#6ee7b7;--msg-sync:#a5b4fc;--msg-async:#f472b6;
+  --shadow:0 4px 24px rgba(0,0,0,.4);--radius:10px;--radius-sm:6px;
+  --mono:ui-monospace,"JetBrains Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;height:100%;-webkit-font-smoothing:antialiased;}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 20px;background:var(--bg-2);border-bottom:1px solid var(--border);flex-shrink:0;}
+.brand{display:flex;align-items:center;gap:10px;}
+.logo{width:26px;height:26px;color:var(--accent);flex-shrink:0;}
+.title{font-weight:600;font-size:14px;letter-spacing:-.01em;}
+.subtitle{font-size:11px;color:var(--text-mute);margin-top:1px;}
+
+.tabs{display:flex;gap:4px;background:var(--bg-3);padding:4px;border-radius:8px;border:1px solid var(--border);}
+.tab{background:transparent;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;color:var(--text-dim);display:flex;align-items:center;gap:8px;font-size:13px;font-family:inherit;transition:background .15s,color .15s;}
+.tab:hover{color:var(--text);background:var(--bg-elev);}
+.tab[aria-selected="true"]{background:var(--bg-elev);color:var(--text);}
+.tab-letter{display:inline-block;font-family:var(--mono);font-size:12px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--bg-3);border:1px solid var(--border);}
+.tab[data-flow="A"][aria-selected="true"] .tab-letter{background:var(--client-color);color:#0a0a0b;border-color:var(--client-color);}
+.tab[data-flow="B"][aria-selected="true"] .tab-letter{background:var(--keycloak-color);color:#0a0a0b;border-color:var(--keycloak-color);}
+.tab[data-flow="C"][aria-selected="true"] .tab-letter{background:var(--resource-color);color:#0a0a0b;border-color:var(--resource-color);}
+.tab[data-flow="D"][aria-selected="true"] .tab-letter{background:var(--user-color);color:#0a0a0b;border-color:var(--user-color);}
+.tab-badge{font-size:10px;padding:1px 5px;border-radius:3px;font-weight:600;}
+.viable{background:rgba(16,185,129,.2);color:#10b981;}
+.no-viable{background:rgba(239,68,68,.2);color:#ef4444;}
+
+.layout{display:flex;height:calc(100vh - 57px);overflow:hidden;}
+.canvas-wrap{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);background:linear-gradient(180deg,#0d0d10 0%,#0a0a0b 100%);}
+
+.viability-banner{padding:10px 20px;font-size:12px;border-bottom:1px solid var(--border);}
+.viability-banner.viable{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.3);}
+.viability-banner.no-viable{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.3);}
+.vb-eyebrow{font-weight:600;margin-bottom:4px;}
+.vb-body{color:var(--text-dim);}
+.vb-hint{color:var(--text-mute);margin-top:4px;font-size:11px;}
+
+.canvas-header{padding:12px 20px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.canvas-title{font-weight:600;font-size:15px;}
+.canvas-meta{font-size:11px;color:var(--text-mute);margin-top:2px;}
+
+.svg-host{flex:1;overflow:auto;padding:16px;min-height:0;}
+.svg-host svg{display:block;width:100%;}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:8px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text-mute);}
+.legend-item{display:flex;align-items:center;gap:5px;}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+.controls-inner{display:flex;align-items:center;gap:16px;padding:10px 20px;border-top:1px solid var(--border);flex-shrink:0;}
+.ctrl-group{display:flex;align-items:center;gap:8px;}
+.ctrl-group.slider{gap:6px;}
+.ctrl-group.progress{flex:1;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--text);cursor:pointer;font-size:13px;font-family:inherit;transition:background .15s,border-color .15s;}
+.btn:hover{background:var(--bg-3);border-color:var(--accent);}
+.btn.primary{background:var(--accent);color:#0a0a0b;border-color:var(--accent);font-weight:600;}
+.btn.primary:hover{background:#6b70ff;}
+.btn svg{width:15px;height:15px;}
+label{color:var(--text-mute);font-size:12px;white-space:nowrap;}
+input[type=range]{width:80px;accent-color:var(--accent);}
+.mono{font-family:var(--mono);font-size:12px;}
+.bar{height:4px;background:var(--bg-3);border-radius:2px;overflow:hidden;}
+.bar div{height:100%;background:var(--accent);border-radius:2px;transition:width .3s ease;width:0%;}
+
+.side{width:340px;flex-shrink:0;overflow-y:auto;display:flex;flex-direction:column;gap:0;background:var(--bg-2);}
+.card{margin:0;padding:16px;border-bottom:1px solid var(--border);}
+.card-eyebrow{font-size:10px;font-weight:600;color:var(--text-mute);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.card.now h2{margin:0 0 8px;font-size:14px;font-weight:600;line-height:1.4;}
+.card.now p{margin:0;color:var(--text-dim);font-size:13px;}
+.step-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;}
+.tag{font-size:10px;padding:2px 6px;border-radius:3px;background:var(--bg-3);border:1px solid var(--border);color:var(--text-mute);font-family:var(--mono);}
+
+.card.code{padding:0;}
+.code-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 12px;}
+.code-tab{background:transparent;border:0;padding:8px 10px;cursor:pointer;color:var(--text-mute);font-size:11px;font-family:var(--mono);border-bottom:2px solid transparent;margin-bottom:-1px;}
+.code-tab:hover{color:var(--text);}
+.code-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent);}
+.card.code pre{margin:0;padding:12px;overflow-x:auto;font-size:12px;font-family:var(--mono);line-height:1.6;color:var(--text-dim);max-height:260px;}
+
+.card.jwt{padding:16px;}
+.token-meta{margin-bottom:10px;font-size:12px;}
+.token-meta-k{color:var(--text-mute);}
+.token-meta-v{color:var(--accent);font-family:var(--mono);}
+.claims-table{width:100%;border-collapse:collapse;font-size:11px;font-family:var(--mono);}
+.claims-table th{text-align:left;color:var(--text-mute);font-weight:500;padding:4px 8px 4px 0;border-bottom:1px solid var(--border);}
+.claims-table td{padding:4px 8px 4px 0;vertical-align:top;color:var(--text-dim);border-bottom:1px solid var(--border);}
+.claims-table td:first-child code{color:var(--accent-2);}
+.claims-table td:nth-child(2) code{color:var(--user-color);}
+.claims-table td:last-child{color:var(--text-mute);font-family:inherit;}
+
+.card.actors{padding:16px;}
+.card.actors ul{margin:0;padding:0;list-style:none;}
+.actor-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius-sm);cursor:pointer;transition:background .15s;}
+.actor-row:hover{background:var(--bg-elev);}
+.actor-row.active{background:var(--bg-elev);border:1px solid var(--border);}
+.actor-swatch{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.actor-name{font-size:13px;font-weight:500;}
+.actor-role{font-size:11px;color:var(--text-mute);margin-left:auto;}
+
+.why-section{padding:20px;border-top:1px solid var(--border);background:linear-gradient(135deg,rgba(126,131,255,.05) 0%,rgba(94,234,212,.05) 100%);}
+.why-section h3{font-size:14px;font-weight:600;margin:0 0 10px;color:var(--accent);}
+.why-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.why-card{padding:12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-2);}
+.why-card h4{font-size:12px;font-weight:600;margin:0 0 6px;}
+.why-card p{font-size:11px;color:var(--text-dim);margin:0;line-height:1.5;}
+.why-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-bottom:4px;}
+.why-badge.auth{background:rgba(239,68,68,.2);color:#ef4444;}
+.why-badge.ciba{background:rgba(16,185,129,.2);color:#10b981;}
+
+@keyframes arrow-appear{from{opacity:0;transform:scaleX(0);}to{opacity:1;transform:scaleX(1);}}
+@keyframes glow-pulse{0%,100%{filter:drop-shadow(0 0 3px currentColor);}50%{filter:drop-shadow(0 0 8px currentColor);}}
+
+@media(max-width:900px){
+  .layout{flex-direction:column;height:auto;}
+  .side{width:100%;}
+  .tabs{flex-wrap:wrap;}
+  .why-grid{grid-template-columns:1fr;}
+}
+  </style>
+</head>
+<body data-theme="dark">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" class="logo" aria-hidden="true">
+        <path fill="currentColor" d="M12 1.5 3 5v6.4c0 4.5 3.2 8.6 9 11 5.8-2.4 9-6.5 9-11V5l-9-3.5z"/>
+      </svg>
+      <div>
+        <div class="title">CIBA Flow Studio</div>
+        <div class="subtitle">ciba-callagent · OpenID Connect CIBA interactive flows</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab" data-flow="A" role="tab" aria-selected="true">
+        <span class="tab-letter">A</span>
+        <span class="tab-name">CIBA Poll</span>
+        <span class="tab-rfc">RFC 9000 · 7-step flow</span>
+      </button>
+      <button class="tab" data-flow="B" role="tab" aria-selected="false">
+        <span class="tab-letter">B</span>
+        <span class="tab-name">CIBA Ping</span>
+        <span class="tab-rfc">Push-only · no polling</span>
+      </button>
+      <button class="tab" data-flow="C" role="tab" aria-selected="false">
+        <span class="tab-letter">C</span>
+        <span class="tab-name">Token Exchange</span>
+        <span class="tab-rfc">RFC 8693 · OBO</span>
+      </button>
+      <button class="tab" data-flow="D" role="tab" aria-selected="false">
+        <span class="tab-letter">D</span>
+        <span class="tab-name">Full Diagram</span>
+        <span class="tab-rfc">All flows combined</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="canvas-wrap">
+      <div class="viability-banner" id="viabilityBanner" hidden></div>
+      <div class="canvas-header">
+        <div class="canvas-title" id="flowTitle">Flow A — CIBA Poll</div>
+        <div class="canvas-meta" id="flowMeta">OpenID Connect CIBA · Client-Initiated Backchannel Authentication</div>
+      </div>
+      <div class="svg-host" id="svgHost">
+        <svg id="sequence" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div class="legend" id="legend"></div>
+      <div class="controls-inner">
+        <div class="ctrl-group">
+          <button id="btnPlay" class="btn primary" title="Play">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            <span>Play</span>
+          </button>
+          <button id="btnStep" class="btn" title="Next step">
+            <svg viewBox="0 0 24 24"><path d="M6 5l8 7-8 7V5zm10 0h2v14h-2z" fill="currentColor"/></svg>
+            <span>Step</span>
+          </button>
+          <button id="btnReset" class="btn" title="Reset">
+            <svg viewBox="0 0 24 24"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" fill="currentColor"/></svg>
+            <span>Reset</span>
+          </button>
+        </div>
+        <div class="ctrl-group slider">
+          <label for="speed">Speed</label>
+          <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1" />
+          <span id="speedVal" class="mono">1.0×</span>
+        </div>
+        <div class="ctrl-group progress">
+          <div class="bar"><div id="barFill"></div></div>
+        </div>
+      </div>
+
+      <div class="why-section">
+        <h3>Why CIBA?</h3>
+        <div class="why-grid">
+          <div class="why-card">
+            <span class="why-badge auth">Auth Code</span>
+            <h4>User must be present at the browser/app</h4>
+            <p>The classic OAuth flow requires the user to be redirected to the IdP, log in, and come back. The user is actively involved in every step — they must be at a browser or app.</p>
+          </div>
+          <div class="why-card">
+            <span class="why-badge ciba">CIBA</span>
+            <h4>User is NOT present — agent acts on their behalf</h4>
+            <p>With CIBA, an AI agent initiates the authentication. The user receives a push notification on their phone, approves with biometrics, and the agent gets a token — without the user being at a browser.</p>
+          </div>
+        </div>
+        <p style="margin-top:10px;font-size:11px;color:var(--text-mute);">Use case: AI voice agents (Hermes) that need to access user resources — calendar, email, files — while the user is on a phone call or away from their computer.</p>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card now">
+        <div class="card-eyebrow">Step <span id="stepIdx">0</span> / <span id="stepTotal">0</span></div>
+        <h2 id="stepTitle">—</h2>
+        <p id="stepDesc">Press <strong>Play</strong> to start the animation.</p>
+        <div class="step-tags" id="stepTags"></div>
+      </div>
+
+      <div class="card code">
+        <div class="code-tabs" id="codeTabs"></div>
+        <pre><code id="codeBlock">// Select a flow and press Play.</code></pre>
+      </div>
+
+      <div class="card jwt" id="jwtCard" hidden>
+        <div class="card-eyebrow">Token claims for this step</div>
+        <div class="token-meta">
+          <span class="token-meta-k">Token:</span>
+          <span class="token-meta-v" id="tokenMeta">—</span>
+        </div>
+        <table class="claims-table">
+          <thead>
+            <tr><th>Claim</th><th>Value</th><th>Note</th></tr>
+          </thead>
+          <tbody id="claimsTbody"></tbody>
+        </table>
+      </div>
+
+      <div class="card actors" id="actorsCard">
+        <div class="card-eyebrow">Actors in this flow</div>
+        <ul id="actorsList"></ul>
+      </div>
+    </aside>
+  </main>
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================
+  //  Actor definitions
+  // ============================================================
+  const actor = (id, name, role, color) => ({ id, name, role, color });
+
+  // ============================================================
+  //  FLOW A: CIBA Poll — the standard 7-step flow
+  // ============================================================
+  const flowA = {
+    id: 'A',
+    title: 'Flow A — CIBA Poll (Standard)',
+    meta: 'OpenID Connect CIBA · RFC 9000 · Client-Initiated Backchannel Authentication',
+    viable: true,
+    actors: [
+      actor('user',    'User',              'End user · authenticating on phone',    '#4ade80'),
+      actor('client', 'Client / Agent',    'AI Agent (Hermes) · needs token',      '#7e83ff'),
+      actor('keycloak','Keycloak',         'Identity Provider · CIBA enabled',    '#fb923c'),
+      actor('device', 'Auth Device',       'Phone · Keycloak Authenticator app',   '#c084fc'),
+      actor('rs',     'Resource Server',   'Spring Boot API · validates token',   '#5eead4'),
+    ],
+    steps: [
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: 'POST /ext/ciba/auth/authreq',
+        desc: 'The AI agent (Hermes) initiates CIBA by sending an authentication request to Keycloak. Includes login_hint (user identifier), binding_message (what the user will see), and requested_scope.',
+        code: {
+          bash:
+`curl -s -X POST \\
+  http://keycloak:8180/realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/authreq \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "client_id":        "ciba-agent",
+    "client_secret":    "agent-secret",
+    "login_hint":       "user@example.com",
+    "binding_message":  "Confirm agent access to your calendar",
+    "requested_scope":  "openid profile email calendar.read"
+  }' | jq .`,
+          json:
+`{
+  "auth_req_id": "AR-a1b2c3d4-...",
+  "expires_in":  300,
+  "interval":    5
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'device',
+        kind: 'sync',
+        label: 'Push notification to phone',
+        desc: 'Keycloak sends a push notification to the user\'s phone via the Authenticator app (or SMS). The user sees the binding_message: "Confirm agent access to your calendar".',
+        code: {
+          note:
+`Push payload (APNs/FCM via Keycloak broker):
+  title:   "CIBA Authentication Request"
+  body:    "Confirm agent access to your calendar"
+  ttl:     300
+  actions: ["Approve", "Deny"]`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'user', to: 'device',
+        kind: 'sync',
+        label: 'User sees binding_message → Approves',
+        desc: 'The user receives the push notification on their phone and approves the request using biometrics (FaceID/fingerprint) or PIN. The approval is sent back to Keycloak.',
+        code: {
+          note:
+`Phone screen:
+  "An AI agent is requesting access to your calendar."
+  "Confirm agent access to your calendar"
+  [ Approve with FaceID ]  [ Deny ]`,
+        },
+        actor: 'user',
+      },
+      {
+        from: 'device', to: 'keycloak',
+        kind: 'sync',
+        label: 'Approval delivered to Keycloak',
+        desc: 'The device sends the user\'s approval (signed with device key) back to Keycloak. This confirms the user is in possession of the phone and has approved.',
+        code: {
+          http:
+`POST /realms/ciba-realm/ext/ciba/auth/device HTTP/1.1
+Content-Type: application/json
+
+{
+  "auth_req_id": "AR-a1b2c3d4-...",
+  "decision":    "approved",
+  "device_assertion": "eyJ...signature...",
+  "biometric_used":   "faceid"
+}`,
+        },
+        actor: 'device',
+      },
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: 'POLLING POST /ext/ciba/auth/token',
+        desc: 'While waiting, the agent polls Keycloak every N seconds (interval=5 from step 1). Until the user approves, Keycloak returns 400 error "authorization_pending".',
+        code: {
+          http:
+`POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn%3Aopenid%3Aparams%3Agrant-type%3Aciba
+&auth_req_id=AR-a1b2c3d4-...
+&client_id=ciba-agent
+
+# While pending → HTTP 400
+# { "error": "authorization_pending" }
+
+# After approval → HTTP 200`,
+          json:
+`# After user approves — HTTP 200
+{
+  "access_token":  "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "id_token":      "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in":    300,
+  "token_type":    "Bearer",
+  "scope":         "openid profile email calendar.read"
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'client',
+        kind: 'reply',
+        label: '200 {access_token, id_token}',
+        desc: 'Keycloak returns the tokens. The access_token was issued directly to the agent client — but the user authenticated it via the push notification. The token includes the cti (CIBA Token Identifier) claim.',
+        code: {
+          json:
+`{
+  "access_token":  "eyJhbG...VCJ9...",
+  "id_token":      "eyJhbG...VCJ9...",
+  "refresh_token": "eyJhbG...VCJ9...",
+  "expires_in":    300,
+  "token_type":    "Bearer",
+  "scope":         "openid profile email calendar.read"
+}`,
+          json2:
+`# Keycloak ID Token claims (decoded)
+{
+  "iss":         "http://keycloak:8180/realms/ciba-realm",
+  "sub":         "user-uuid-1234",
+  "aud":         ["ciba-agent"],
+  "exp":         1699999999,
+  "iat":         1699999000,
+  "auth_req_id": "AR-a1b2c3d4-...",
+  "cti":         "ciba-token-identifier-xyz",  // Critical for replay prevention!
+  "nonce":       "random-nonce-value",
+  "at_hash":     "...",
+  "sid":         "session-id",
+  "name":        "John Doe",
+  "email":       "john@example.com"
+}`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'client', to: 'rs',
+        kind: 'sync',
+        label: 'GET /api/calendar/events  Bearer <token>',
+        desc: 'The agent now calls the Resource Server (Spring Boot API) with the access_token as a Bearer token. The API will validate the token signature, issuer, audience, expiration, scope, and cti claim.',
+        code: {
+          http:
+`GET /api/calendar/events?user_id=user-uuid-1234 HTTP/1.1
+Host: spring-boot-api:9090
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'rs', to: 'rs',
+        kind: 'self',
+        label: 'Validate token (JWT verification)',
+        desc: 'The Resource Server validates the JWT: (1) fetches JWKS from Keycloak, (2) verifies signature algorithm (RS256/PS256), (3) checks iss matches expected issuer, (4) checks aud contains this resource server, (5) checks exp is not in the past, (6) checks scope includes calendar.read, (7) checks cti claim to prevent replay.',
+        code: {
+          note:
+`Token validation checklist:
+  [x] Signature verified against Keycloak JWKS
+  [x] iss = http://keycloak:8180/realms/ciba-realm
+  [x] aud includes spring-boot-api
+  [x] exp > now
+  [x] scope includes "calendar.read"
+  [x] cti (CIBA Token Identifier) not already used
+  [x] nonce present (CIBA requirement)`,
+        },
+        actor: 'rs',
+      },
+      {
+        from: 'rs', to: 'client',
+        kind: 'reply',
+        label: '200 {events: [...]}',
+        desc: 'The Resource Server returns the protected resource data. The agent can now act on behalf of the user with the authorized access.',
+        code: {
+          json:
+`{
+  "user": "John Doe",
+  "events": [
+    { "title": "Team Standup",    "when": "2026-08-01T09:00Z" },
+    { "title": "Sprint Review",   "when": "2026-08-01T15:00Z" }
+  ]
+}`,
+        },
+        actor: 'rs',
+      },
+    ],
+  };
+
+  // ============================================================
+  //  FLOW B: CIBA Ping — Push-only, no polling
+  // ============================================================
+  const flowB = {
+    id: 'B',
+    title: 'Flow B — CIBA Ping (Push-Only)',
+    meta: 'OpenID Connect CIBA · No polling · backchannel_client_uri callback',
+    viable: true,
+    actors: [
+      actor('user',    'User',              'End user · authenticating on phone',    '#4ade80'),
+      actor('client', 'Client / Agent',    'AI Agent (Hermes) · needs token',      '#7e83ff'),
+      actor('keycloak','Keycloak',         'Identity Provider · CIBA enabled',    '#fb923c'),
+      actor('device', 'Auth Device',       'Phone · Keycloak Authenticator app',   '#c084fc'),
+      actor('rs',     'Resource Server',   'Spring Boot API · validates token',   '#5eead4'),
+    ],
+    steps: [
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: 'POST /ext/ciba/auth/authreq  (with backchannel_client_uri)',
+        desc: 'The agent sends CIBA request with backchannel_client_uri configured. When the user approves, Keycloak will POST directly to this URL — no polling needed.',
+        code: {
+          bash:
+`curl -s -X POST \\
+  http://keycloak:8180/realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/authreq \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "client_id":               "ciba-agent",
+    "client_secret":           "agent-secret",
+    "login_hint":              "user@example.com",
+    "binding_message":         "Confirm agent access to your calendar",
+    "requested_scope":         "openid profile email calendar.read",
+    "backchannel_client_uri":  "https://agent.example.com/ciba/callback"
+  }' | jq .`,
+          json:
+`{
+  "auth_req_id": "AR-ping-1234-...",
+  "expires_in":  300,
+  "interval":    0
+  // interval=0 means: no polling, use ping callback instead
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'device',
+        kind: 'sync',
+        label: 'Push notification to phone',
+        desc: 'Keycloak sends push notification to user\'s phone. Same as Flow A — the user sees the binding_message and approves with biometrics.',
+        code: {
+          note:
+`Push notification:
+  title: "CIBA Authentication Request"
+  body:  "Confirm agent access to your calendar"
+  ttl:   300
+  actions: ["Approve", "Deny"]`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'user', to: 'device',
+        kind: 'sync',
+        label: 'User approves with biometrics',
+        desc: 'User sees the binding_message and approves the request on their phone.',
+        code: {
+          note:
+`Phone screen:
+  "Confirm agent access to your calendar"
+  [ Approve with FaceID ]  [ Deny ]`,
+        },
+        actor: 'user',
+      },
+      {
+        from: 'device', to: 'keycloak',
+        kind: 'sync',
+        label: 'Approval sent to Keycloak',
+        desc: 'The device sends the approval back to Keycloak, signed with the device-bound key.',
+        code: {
+          http:
+`POST /realms/ciba-realm/ext/ciba/auth/device HTTP/1.1
+Content-Type: application/json
+
+{
+  "auth_req_id":     "AR-ping-1234-...",
+  "decision":       "approved",
+  "device_assertion": "eyJ...signature..."
+}`,
+        },
+        actor: 'device',
+      },
+      {
+        from: 'keycloak', to: 'client',
+        kind: 'sync',
+        label: 'POST /ciba/callback  (Ping from Keycloak)',
+        desc: 'Keycloak POSTs the tokens directly to the client\'s backchannel_client_uri — no polling needed! The agent has a listener ready for this callback.',
+        code: {
+          http:
+`POST /ciba/callback HTTP/1.1
+Host: agent.example.com
+Content-Type: application/json
+Authorization: Bearer eyJ...client-auth...
+
+{
+  "auth_req_id":  "AR-ping-1234-...",
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "id_token":     "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in":   300
+}`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'client', to: 'rs',
+        kind: 'sync',
+        label: 'GET /api/calendar/events  Bearer <token>',
+        desc: 'The agent calls the Resource Server with the access_token — same validation as Flow A.',
+        code: {
+          http:
+`GET /api/calendar/events?user_id=user-uuid-1234 HTTP/1.1
+Host: spring-boot-api:9090
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'rs', to: 'client',
+        kind: 'reply',
+        label: '200 {events: [...]}',
+        desc: 'Resource Server returns the protected data. Success — Flow B is complete without any polling!',
+        code: {
+          json:
+`{
+  "user": "John Doe",
+  "events": [
+    { "title": "Team Standup",  "when": "2026-08-01T09:00Z" },
+    { "title": "Sprint Review", "when": "2026-08-01T15:00Z" }
+  ]
+}`,
+        },
+        actor: 'rs',
+      },
+    ],
+  };
+
+  // ============================================================
+  //  FLOW C: Token Exchange (RFC 8693) — On-Behalf-Of
+  // ============================================================
+  const flowC = {
+    id: 'C',
+    title: 'Flow C — CIBA + Token Exchange (RFC 8693)',
+    meta: 'OAuth 2.0 Token Exchange · On-Behalf-Of · CIBA token → resource-specific token',
+    viable: true,
+    actors: [
+      actor('user',    'User',              'End user · authenticating on phone',    '#4ade80'),
+      actor('client', 'Client / Agent',    'AI Agent (Hermes) · needs token',      '#7e83ff'),
+      actor('keycloak','Keycloak',         'Identity Provider · CIBA enabled',    '#fb923c'),
+      actor('device', 'Auth Device',       'Phone · Keycloak Authenticator app',   '#c084fc'),
+      actor('rs',     'Resource Server',   'Spring Boot API · validates token',   '#5eead4'),
+    ],
+    steps: [
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: '1. CIBA Auth Request (same as Flow A)',
+        desc: 'The agent initiates CIBA flow — identical to Flow A Step 1. Keycloak returns auth_req_id. Agent starts polling (or waits for ping callback).',
+        code: {
+          bash:
+`curl -s -X POST \\
+  http://keycloak:8180/realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/authreq \\
+  -d '{
+    "client_id":        "ciba-agent",
+    "client_secret":    "agent-secret",
+    "login_hint":       "user@example.com",
+    "binding_message":  "Confirm agent access",
+    "requested_scope":   "openid profile email"
+  }' | jq .`,
+          json:
+`{
+  "auth_req_id": "AR-te-1234-...",
+  "expires_in":  300,
+  "interval":    5
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'device',
+        kind: 'sync',
+        label: '2. Push notification to phone',
+        desc: 'Keycloak sends push notification. User approves with biometrics (FaceID/fingerprint).',
+        code: {
+          note:
+`Push: "An agent is requesting access. Approve?"`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'user', to: 'device',
+        kind: 'sync',
+        label: '3. User approves',
+        desc: 'User approves the request on their phone.',
+        code: { note: '[ Approve with FaceID ]' },
+        actor: 'user',
+      },
+      {
+        from: 'device', to: 'keycloak',
+        kind: 'sync',
+        label: '4. Approval delivered',
+        desc: 'Device sends approval to Keycloak.',
+        code: {
+          http:
+`POST /realms/ciba-realm/ext/ciba/auth/device HTTP/1.1
+{ "auth_req_id": "AR-te-1234-...", "decision": "approved" }`,
+        },
+        actor: 'device',
+      },
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: '5. Poll for token (grant_type=ciba)',
+        desc: 'Agent polls with grant_type=urn:openid:params:grant-type:ciba. Gets back a CIBA access_token scoped broadly (openid profile email).',
+        code: {
+          http:
+`POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/token HTTP/1.1
+
+grant_type=urn%3Aopenid%3Aparams%3Agrant-type%3Aciba
+&auth_req_id=AR-te-1234-...
+&client_id=ciba-agent`,
+          json:
+`{
+  "access_token":  "eyJhbG...CIBA...",
+  "id_token":      "eyJhbG...ID...",
+  "expires_in":    300,
+  "scope":         "openid profile email"
+  // Note: no calendar.read scope yet!
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'client',
+        kind: 'reply',
+        label: '6. CIBA access_token received',
+        desc: 'The agent receives a CIBA access_token. Now it can exchange this token for a new one scoped specifically for the resource server (calendar.read, email, etc.) using RFC 8693 Token Exchange.',
+        code: {
+          json:
+`{
+  "access_token":  "eyJhbG...CIBA...",
+  "id_token":      "eyJhbG...ID...",
+  "expires_in":    300,
+  "token_type":    "Bearer",
+  "scope":         "openid profile email"
+}`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: '7. Token Exchange (RFC 8693) — OBO',
+        desc: 'The agent exchanges the CIBA subject_token for a new access_token with a specific audience (the Resource Server). This allows the agent to get a token scoped for the calendar API specifically.',
+        code: {
+          http:
+`POST /realms/ciba-realm/protocol/openid-connect/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange
+&subject_token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+&subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token
+&requested_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token
+&audience=spring-boot-api
+&scope=calendar.read`,
+          json:
+`# Response from Token Exchange
+{
+  "access_token":     "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "expires_in":       3600,
+  "scope":             "calendar.read",
+  "token_type":        "Bearer"
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'client',
+        kind: 'reply',
+        label: '8. Exchange token received',
+        desc: 'Keycloak returns a new access_token scoped specifically for the Resource Server (spring-boot-api) with only the calendar.read scope. This is a different token from the CIBA token — the audience and scope are narrowed.',
+        code: {
+          json:
+`{
+  "access_token":     "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "expires_in":       3600,
+  "scope":             "calendar.read",
+  "token_type":        "Bearer"
+}`,
+          note:
+`Decoded claims of exchanged token:
+  iss:    http://keycloak:8180/realms/ciba-realm
+  sub:    user-uuid-1234
+  aud:    [spring-boot-api]   // narrowed to RS
+  scope:  calendar.read       // narrowed to needed scope
+  act:    { sub: ciba-agent }  // RFC 8693: actor claim
+  cti:    ciiba-new-token-id  // new CTI for this token
+  exp:    now + 3600`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'client', to: 'rs',
+        kind: 'sync',
+        label: '9. GET /api/calendar/events  Bearer <exchanged_token>',
+        desc: 'The agent calls the Resource Server with the exchanged token. The RS validates the token — now scoped specifically for this resource server with calendar.read.',
+        code: {
+          http:
+`GET /api/calendar/events HTTP/1.1
+Host: spring-boot-api:9090
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'rs', to: 'client',
+        kind: 'reply',
+        label: '10. 200 {events: [...]}',
+        desc: 'Resource Server returns the calendar events. The token exchange allows fine-grained scoping per resource server — the agent never had a token scoped for the calendar API until it was exchanged.',
+        code: {
+          json:
+`{
+  "user": "John Doe",
+  "events": [
+    { "title": "Team Standup",  "when": "2026-08-01T09:00Z" }
+  ]
+}`,
+        },
+        actor: 'rs',
+      },
+    ],
+  };
+
+  // ============================================================
+  //  FLOW D: Full Combined Diagram
+  // ============================================================
+  const flowD = {
+    id: 'D',
+    title: 'Flow D — Full CIBA Architecture',
+    meta: 'Complete CIBA flow with all components · Keycloak configuration · cti claim',
+    viable: true,
+    actors: [
+      actor('user',    'User',              'End user · authenticating on phone',    '#4ade80'),
+      actor('client', 'Client / Agent',    'AI Agent (Hermes) · needs token',      '#7e83ff'),
+      actor('keycloak','Keycloak',         'Identity Provider · CIBA enabled',    '#fb923c'),
+      actor('device', 'Auth Device',       'Phone · Keycloak Authenticator app',   '#c084fc'),
+      actor('rs',     'Resource Server',   'Spring Boot API · validates token',   '#5eead4'),
+    ],
+    steps: [
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: '1. POST /ext/ciba/auth/authreq',
+        desc: 'Agent initiates CIBA with login_hint, binding_message, and requested_scope. Keycloak creates an Authentication Request and returns auth_req_id.',
+        code: {
+          bash:
+`# Keycloak CIBA configuration
+kcadm.sh create clients/ciba-realm -b '{
+  "clientId": "ciba-agent",
+  "enabled": true,
+  "clientAuthenticatorType": "client-secret",
+  "cibaMode": "poll",
+  "backchannelAuthenticationRequestSigningAlg": "PS256"
+}'`,
+          http:
+`POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/authreq HTTP/1.1
+Content-Type: application/json
+
+{
+  "client_id":        "ciba-agent",
+  "client_secret":    "secret",
+  "login_hint":       "user@example.com",
+  "binding_message":  "Confirm agent access to your calendar",
+  "requested_scope":  "openid profile email calendar.read"
+}`,
+          json:
+`{
+  "auth_req_id": "AR-a1b2c3d4-5e6f-...",
+  "expires_in":  300,
+  "interval":    5
+}`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'device',
+        kind: 'sync',
+        label: '2. Push notification via Authenticator app',
+        desc: 'Keycloak pushes to the user\'s phone via the Keycloak Authenticator app (or SMS gateway). The binding_message is shown to the user.',
+        code: {
+          json:
+`{
+  "title":       "CIBA Authentication",
+  "body":        "Confirm agent access to your calendar",
+  "ttl":         300,
+  "action_url":  "keycloak://oauth/approve",
+  "actions":     ["Approve", "Deny"]
+}`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'user', to: 'device',
+        kind: 'sync',
+        label: '3. User sees binding_message → Approves',
+        desc: 'The user reads the binding_message on their phone and approves using biometrics (something you ARE) or PIN (something you KNOW).',
+        code: {
+          note:
+`Phone: "ciba-agent wants to access your calendar."
+  Message: "Confirm agent access to your calendar"
+  [ Approve with FaceID ]  [ Deny ]`,
+        },
+        actor: 'user',
+      },
+      {
+        from: 'device', to: 'keycloak',
+        kind: 'sync',
+        label: '4. POST /ext/ciba/auth/device (approval)',
+        desc: 'The device sends the approval (signed with the device-bound key) back to Keycloak. This proves the user has possession of the phone.',
+        code: {
+          http:
+`POST /realms/ciba-realm/ext/ciba/auth/device HTTP/1.1
+Content-Type: application/json
+
+{
+  "auth_req_id":     "AR-a1b2c3d4-...",
+  "decision":        "approved",
+  "device_assertion": "eyJ...device-signed...",
+  "biometric_used":   "faceid"
+}`,
+        },
+        actor: 'device',
+      },
+      {
+        from: 'client', to: 'keycloak',
+        kind: 'sync',
+        label: '5. POLLING POST /ext/ciba/auth/token',
+        desc: 'The agent polls Keycloak every 5 seconds using the auth_req_id. While pending, it gets 400 authorization_pending. After approval, it gets the tokens.',
+        code: {
+          http:
+`POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn%3Aopenid%3Aparams%3Agrant-type%3Aciba
+&auth_req_id=AR-a1b2c3d4-...
+&client_id=ciba-agent
+
+# HTTP 400 → { "error": "authorization_pending" }
+# (repeat every 5 seconds until approval)`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'keycloak', to: 'client',
+        kind: 'reply',
+        label: '6. 200 {access_token, id_token, cti}',
+        desc: 'Keycloak returns tokens. The access_token has the cti (CIBA Token Identifier) claim — a unique identifier that the Resource Server MUST validate to prevent token replay attacks.',
+        code: {
+          json:
+`{
+  "access_token":  "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "id_token":      "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_in":    300,
+  "token_type":    "Bearer",
+  "scope":         "openid profile email calendar.read"
+}`,
+          json2:
+`# ID Token critical CIBA claims:
+{
+  "iss":         "http://keycloak:8180/realms/ciba-realm",
+  "sub":         "user-uuid",
+  "auth_req_id": "AR-a1b2c3d4-...",
+  "cti":         "ciba-token-identifier-abc123",  // REQUIRED for replay prevention
+  "nonce":       "random-nonce",
+  "aud":         ["ciba-agent"],
+  "exp":         1699999999,
+  "iat":         1699999000
+}`,
+        },
+        actor: 'keycloak',
+      },
+      {
+        from: 'client', to: 'rs',
+        kind: 'sync',
+        label: '7. GET /api/calendar/events  Bearer <token>',
+        desc: 'The agent calls the Resource Server with the CIBA access_token. The RS must validate the cti claim to ensure this token has not been replayed.',
+        code: {
+          http:
+`GET /api/calendar/events HTTP/1.1
+Host: spring-boot-api:9090
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...`,
+        },
+        actor: 'client',
+      },
+      {
+        from: 'rs', to: 'rs',
+        kind: 'self',
+        label: '8. Token introspection + cti validation',
+        desc: 'The Resource Server validates: (1) JWT signature via Keycloak JWKS, (2) iss/aud/exp, (3) scope, (4) cti claim NOT previously used (replay prevention). Store used cti values in database/redis.',
+        code: {
+          note:
+`Token validation at Resource Server:
+
+1. Fetch JWKS:
+   GET /realms/ciba-realm/protocol/openid-connect/certs
+
+2. Validate JWT:
+   - Signature: RS256/PS256 ✓
+   - iss: http://keycloak:8180/realms/ciba-realm ✓
+   - aud: spring-boot-api ✓
+   - exp: not expired ✓
+   - scope: includes "calendar.read" ✓
+
+3. CIBA-specific checks:
+   - nonce present ✓
+   - cti NOT in used_cti_store ✓  ← Replay prevention!
+   - Store cti in used_cti_store after validation`,
+        },
+        actor: 'rs',
+      },
+      {
+        from: 'rs', to: 'client',
+        kind: 'reply',
+        label: '9. 200 {events} — Access Granted',
+        desc: 'The Resource Server returns the protected resource. The agent has successfully acted on behalf of the user using CIBA — without the user being at a browser.',
+        code: {
+          json:
+`{
+  "user": "John Doe",
+  "events": [
+    { "title": "Team Standup",  "when": "2026-08-01T09:00Z" },
+    { "title": "Sprint Review", "when": "2026-08-01T15:00Z" }
+  ]
+}
+
+# Audit log at RS:
+[AUDIT] sub=user-uuid
+        azp=ciba-agent
+        scope=calendar.read
+        cti=ciba-token-identifier-abc123
+        result=allow`,
+        },
+        actor: 'rs',
+      },
+    ],
+  };
+
+  const FLOWS = { A: flowA, B: flowB, C: flowC, D: flowD };
+
+  // ============================================================
+  //  render.js — SVG sequence renderer
+  // ============================================================
+  const NS = 'http://www.w3.org/2000/svg';
+  const ACTOR_W   = 120;
+  const ACTOR_H   = 56;
+  const ACTOR_GAP = 44;
+  const TOP_PAD   = 30;
+  const LEFT_PAD  = 16;
+  const MESSAGE_GAP = 58;
+
+  const COLORS = {
+    bg:    '#0a0a0b',
+    actorBg:   '#111114',
+    actorBgActive: '#1e1e26',
+    actorBorder: '#2a2a33',
+    lifeline: '#1f1f27',
+    lifelineActive: '#3a3a45',
+    msg:    '#c9c9d2',
+    msgReply: '#6ee7b7',
+    msgSync: '#a5b4fc',
+    msgAsync: '#f472b6',
+    msgPending: '#2a2a33',
+    label:  '#e7e7ea',
+    labelDim: '#8b8b95',
+  };
+
+  const svgEl = (tag, attrs = {}, children = []) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    for (const c of children) el.appendChild(c);
+    return el;
+  };
+
+  const textEl = (text, x, y, opts = {}) => {
+    const t = svgEl('text', {
+      x, y,
+      fill: opts.fill || COLORS.label,
+      'font-size': opts.size || 12,
+      'font-family': opts.family || 'Inter, sans-serif',
+      'text-anchor': opts.anchor || 'start',
+      'font-weight': opts.weight || 400,
+      'letter-spacing': opts.tracking || '0',
+    });
+    const lines = String(text).split('\n');
+    lines.forEach((line, i) => {
+      const ts = svgEl('tspan', { x, dy: i === 0 ? '0' : '1.2em' });
+      ts.textContent = line;
+      t.appendChild(ts);
+    });
+    return t;
+  };
+
+  function actorXMap(actors, renderWidth, actorW = ACTOR_W, actorGap = ACTOR_GAP) {
+    const total = actors.length * actorW + (actors.length - 1) * actorGap;
+    const startX = LEFT_PAD + Math.max(0, (renderWidth - total) / 2);
+    const map = {};
+    actors.forEach((a, i) => {
+      map[a.id] = startX + i * (actorW + actorGap) + actorW / 2;
+    });
+    return map;
+  }
+
+  function heightForSteps(n) {
+    return TOP_PAD + ACTOR_H + 14 + Math.max(1, n) * MESSAGE_GAP + 60;
+  }
+
+  function renderFlow(svgEl_, flow, currentIdx = -1, containerWidthHint = 0) {
+    while (svgEl_.firstChild) svgEl_.removeChild(svgEl_.firstChild);
+
+    let containerWidth = containerWidthHint || svgEl_.clientWidth || 0;
+    if (!containerWidth) {
+      const parent = svgEl_.parentElement;
+      containerWidth = parent ? (parent.clientWidth - 32) : 1100;
+    }
+    if (!containerWidth) containerWidth = 1100;
+    const height = heightForSteps(flow.steps.length);
+
+    const nActors = flow.actors.length;
+    let ACTOR_W_USE = ACTOR_W;
+    let ACTOR_GAP_USE = ACTOR_GAP;
+    let renderWidth = LEFT_PAD * 2 + nActors * ACTOR_W + (nActors - 1) * ACTOR_GAP;
+
+    if (renderWidth - 8 > containerWidth && nActors > 4) {
+      const usableWidth = containerWidth - LEFT_PAD * 2 - 8;
+      const minActorW = 76;
+      const minGap = 24;
+      const x = (usableWidth - (nActors - 1) * minGap) / nActors;
+      if (x >= minActorW) {
+        ACTOR_W_USE = x;
+        ACTOR_GAP_USE = minGap;
+        renderWidth = usableWidth + 8;
+      } else {
+        renderWidth = containerWidth;
+        ACTOR_W_USE = Math.min(ACTOR_W, (containerWidth - LEFT_PAD * 2 - (nActors - 1) * ACTOR_GAP) / nActors);
+      }
+    }
+
+    const xMap = actorXMap(flow.actors, renderWidth, ACTOR_W_USE, ACTOR_GAP_USE);
+
+    svgEl_.setAttribute('viewBox', `0 0 ${renderWidth} ${height}`);
+    svgEl_.setAttribute('preserveAspectRatio', 'xMinYMin meet');
+    if (renderWidth > containerWidth + 8) {
+      svgEl_.setAttribute('width', renderWidth);
+    } else {
+      svgEl_.removeAttribute('width');
+    }
+    svgEl_.setAttribute('height', height);
+
+    // Lifelines
+    const lifelinesGroup = svgEl('g', { class: 'lifelines' });
+    flow.actors.forEach((a) => {
+      const x = xMap[a.id];
+      const line = svgEl('line', {
+        x1: x, x2: x,
+        y1: TOP_PAD + ACTOR_H + 4,
+        y2: height - 20,
+        stroke: COLORS.lifeline,
+        'stroke-width': 1,
+        'stroke-dasharray': '4 5',
+      });
+      line.setAttribute('data-actor', a.id);
+      lifelinesGroup.appendChild(line);
+    });
+    svgEl_.appendChild(lifelinesGroup);
+
+    // Actor boxes
+    const actorsGroup = svgEl('g', { class: 'actors' });
+    flow.actors.forEach((a) => {
+      const x = xMap[a.id] - ACTOR_W / 2;
+      const y = TOP_PAD;
+      const g = svgEl('g', { class: 'actor', 'data-actor': a.id, style: 'cursor:pointer' });
+      g.appendChild(svgEl('rect', {
+        x, y, width: ACTOR_W_USE, height: ACTOR_H,
+        rx: 8, ry: 8,
+        fill: COLORS.actorBg,
+        stroke: a.color,
+        'stroke-width': 1.2,
+        opacity: 0.95,
+      }));
+      g.appendChild(svgEl('circle', {
+        cx: x + 14, cy: y + 14, r: 4,
+        fill: a.color,
+      }));
+      const nameX = x + ACTOR_W_USE / 2;
+      g.appendChild(textEl(a.name, nameX, y + 18, {
+        size: Math.min(12, ACTOR_W_USE / 9), weight: 600,
+        anchor: 'middle',
+      }));
+      g.appendChild(textEl(a.role, nameX, y + 36, {
+        size: 10.5, fill: COLORS.labelDim, anchor: 'middle',
+      }));
+      g.appendChild(textEl(a.id.toUpperCase(), nameX, y + 50, {
+        size: 9.5, weight: 700,
+        fill: a.color,
+        family: 'JetBrains Mono, monospace',
+        tracking: '0.1em',
+        anchor: 'middle',
+      }));
+      actorsGroup.appendChild(g);
+    });
+    svgEl_.appendChild(actorsGroup);
+
+    // Messages
+    const messagesGroup = svgEl('g', { class: 'messages' });
+    flow.steps.forEach((s, i) => {
+      const g = svgEl('g', { class: 'message', 'data-step': i });
+      const y = TOP_PAD + ACTOR_H + MESSAGE_GAP * (i + 0.5) + 14;
+      const fromX = xMap[s.from];
+      const toX   = xMap[s.to];
+
+      g.appendChild(svgEl('rect', {
+        class: 'msg-bg', x: 0, y: y - 14,
+        width: renderWidth, height: MESSAGE_GAP - 8,
+        fill: 'transparent', 'data-row': i,
+      }));
+
+      if (s.kind === 'self') {
+        const w = 40, h = 22;
+        g.appendChild(svgEl('path', {
+          d: `M ${fromX} ${y - 14} q ${w} 0 ${w} ${h} l 0 ${h * 0.6} M ${fromX + w * 0.15} ${y - 14 + h * 1.6} l ${w * 0.15} ${-h * 0.5} l ${-w * 0.3} 0 z`,
+          fill: 'none', stroke: COLORS.msg, 'stroke-width': 1.6,
+        }));
+        g.appendChild(textEl(s.label, fromX + w + 10, y + h, { size: 11, fill: COLORS.msg }));
+      } else {
+        const isReply = s.kind === 'reply';
+        const colour  = isReply ? COLORS.msgReply : COLORS.msg;
+        const dash    = isReply ? '4 4' : 'none';
+        const arrowId = `arrow-${i}`;
+        g.appendChild(svgEl('defs', {}, [
+          svgEl('marker', {
+            id: arrowId, viewBox: '0 0 10 10',
+            refX: '9', refY: '5',
+            markerWidth: '7', markerHeight: '7',
+            orient: 'auto-start-reverse',
+          }, [
+            svgEl('path', { d: 'M0,0 L10,5 L0,10 z', fill: colour }),
+          ]),
+        ]));
+
+        const line = svgEl('line', {
+          x1: fromX, x2: toX, y1: y, y2: y,
+          stroke: colour, 'stroke-width': 1.5,
+          'stroke-dasharray': dash,
+          'marker-end': `url(#${arrowId})`,
+          'data-line': i,
+        });
+        g.appendChild(line);
+
+        const labelX = (fromX + toX) / 2;
+        const labelText = s.label;
+        const dim = labelText.length > 70;
+        g.appendChild(textEl(labelText, labelX, y - 8, {
+          size: dim ? 10.5 : 11.5,
+          fill: COLORS.label,
+          anchor: 'middle',
+          weight: 500,
+        }));
+      }
+      messagesGroup.appendChild(g);
+    });
+    svgEl_.appendChild(messagesGroup);
+
+    applyState(svgEl_, flow, currentIdx, xMap, renderWidth);
+  }
+
+  function applyState(svgEl_, flow, currentIdx, xMapOpt = null, renderWidthOpt = null) {
+    const viewBox = svgEl_.getAttribute('viewBox') || `0 0 ${svgEl_.clientWidth || 1100} 800`;
+    const renderWidth = renderWidthOpt || parseFloat(viewBox.split(' ')[2]) || (svgEl_.clientWidth || 1100);
+    const xMap = xMapOpt || actorXMap(flow.actors, renderWidth);
+
+    const involved = new Set();
+    flow.steps.slice(0, currentIdx + 1).forEach((s) => {
+      involved.add(s.from);
+      if (s.to !== s.from) involved.add(s.to);
+    });
+
+    const upcoming = flow.steps[currentIdx + 1];
+    const activePair = new Set();
+    if (upcoming) {
+      involved.delete(upcoming.from);
+      if (upcoming.to !== upcoming.from) involved.delete(upcoming.to);
+      activePair.add(upcoming.from);
+      if (upcoming.to !== upcoming.from) activePair.add(upcoming.to);
+    }
+
+    svgEl_.querySelectorAll('[data-actor]').forEach((g) => {
+      const id = g.getAttribute('data-actor');
+      const isInvolved = involved.has(id);
+      const isActive   = activePair.has(id);
+      const tagName = g.tagName.toLowerCase();
+      const stroke = (isActive || isInvolved) ? COLORS.lifelineActive : COLORS.lifeline;
+      const strokeWidth = isActive ? 1.5 : 1;
+      if (tagName === 'line') {
+        g.setAttribute('stroke', stroke);
+        g.setAttribute('stroke-width', strokeWidth);
+        return;
+      }
+      const rect = g.querySelector('rect');
+      if (rect) {
+        rect.setAttribute('fill', isActive ? COLORS.actorBgActive : COLORS.actorBg);
+        rect.setAttribute('stroke-width', isActive ? 2 : 1.2);
+        rect.setAttribute('opacity', isInvolved || isActive ? '1' : '0.55');
+      }
+    });
+
+    const messageNodes = svgEl_.querySelectorAll('.message');
+    messageNodes.forEach((node) => {
+      const idx = parseInt(node.getAttribute('data-step'), 10);
+      const visible = idx <= currentIdx;
+      const active = idx === currentIdx || idx === currentIdx + 1;
+      node.style.opacity = visible || active ? 1 : 0.15;
+      const line = node.querySelector('line');
+      if (line) {
+        const s = flow.steps[idx];
+        const isReply = s.kind === 'reply';
+        const targetStroke = (idx === currentIdx) ? (isReply ? '#6ee7b7' : '#7e83ff') :
+                             (visible ? (isReply ? COLORS.msgReply : COLORS.msg) : COLORS.msgPending);
+        line.setAttribute('stroke', targetStroke);
+        line.setAttribute('stroke-width', active ? 2.2 : 1.5);
+      }
+      const path = node.querySelector('path[fill=none]');
+      if (path && active) path.setAttribute('stroke-width', 2.2);
+    });
+  }
+
+  const M2 = { FLOWS, renderFlow, applyState };
+  window.FLOWSTUDIO = M2;
+})();
+
+// ============================================================
+//  app.js — orchestrator
+// ============================================================
+const { FLOWS } = window.FLOWSTUDIO;
+const { renderFlow, applyState } = window.FLOWSTUDIO;
+
+const state = { flowId: 'A', step: -1, playing: false, timer: null, speed: 1 };
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => Array.from(document.querySelectorAll(q));
+
+function setSpeed(val) {
+  state.speed = val;
+  $('#speedVal').textContent = `${val.toFixed(2)}×`;
+  if (state.playing && state.timer) {
+    clearTimeout(state.timer);
+    state.timer = setTimeout(tick, msForStep());
+  }
+}
+function msForStep() { return Math.max(200, 1700 / state.speed); }
+
+function setFlow(id) {
+  state.flowId = id;
+  state.step = -1;
+  state.playing = false;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  $('#btnPlay').lastElementChild.textContent = 'Play';
+
+  $$('.tab').forEach((b) => {
+    const on = b.dataset.flow === id;
+    b.setAttribute('aria-selected', String(on));
+  });
+
+  const flow = FLOWS[id];
+  $('#flowTitle').textContent = flow.title;
+  $('#flowMeta').textContent = flow.meta;
+
+  const banner = $('#viabilityBanner');
+  banner.hidden = false;
+  banner.className = 'viability-banner viable';
+  banner.innerHTML = `
+    <div class="vb-eyebrow">✅ CIBA Flow — ${flow.meta}</div>
+    <div class="vb-body">${flow.title}</div>
+  `;
+
+  const svgHost = $('#svgHost');
+  const hint = svgHost.clientWidth || svgHost.offsetWidth || 0;
+  renderFlow($('#sequence'), flow, -1, hint);
+  renderLegend(flow);
+  renderSideActors(flow);
+  renderStep(flow, -1);
+  $('#barFill').style.width = '0%';
+}
+
+function renderLegend(flow) {
+  $('#legend').innerHTML = flow.actors.map((a) => `
+    <span class="legend-item">
+      <span class="legend-dot" style="background:${a.color}"></span>
+      <span>${a.name}</span>
+    </span>
+  `).join('') + `
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#6ee7b7"></span>
+      <span style="color:var(--text-mute)">response</span>
+    </span>
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#c9c9d2"></span>
+      <span style="color:var(--text-mute)">request</span>
+    </span>
+    <span class="legend-item">
+      <span class="legend-dot" style="background:#7e83ff"></span>
+      <span style="color:var(--text-mute)">active step</span>
+    </span>
+  `;
+}
+
+function renderSideActors(flow) {
+  $('#actorsList').innerHTML = flow.actors.map((a) => `
+    <li class="actor-row" data-actor="${a.id}">
+      <span class="actor-swatch" style="background:${a.color}"></span>
+      <span class="actor-name">${a.name}</span>
+      <span class="actor-role">${a.role}</span>
+    </li>
+  `).join('');
+  $('#actorsList').querySelectorAll('.actor-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      $$('#actorsList .actor-row').forEach((r) => r.classList.toggle('active', r.dataset.actor === row.dataset.actor));
+    });
+  });
+}
+
+function renderStep(flow, idx) {
+  const total = flow.steps.length;
+  const upcoming = flow.steps[idx + 1];
+  const card = upcoming || (total > 0 ? flow.steps[total - 1] : null);
+  const displayStep = idx + 2;
+
+  $('#stepIdx').textContent = upcoming ? displayStep : total;
+  $('#stepTotal').textContent = total;
+  if (!card) {
+    $('#stepTitle').textContent = '—';
+    $('#stepDesc').innerHTML = 'Press <strong>Play</strong> to start the animation.';
+    $('#stepTags').innerHTML = '';
+    $('#codeBlock').textContent = '// Select a flow and press Play.';
+    $('#jwtCard').hidden = true;
+    return;
+  }
+
+  $('#stepTitle').textContent = card.label;
+  $('#stepDesc').textContent = card.desc;
+
+  const tags = [`${card.from}→${card.to}`];
+  tags.push(card.kind === 'sync' ? 'sync' : (card.kind === 'reply' ? 'response' : 'self'));
+  if (card.claims) tags.push('JWT with claims');
+  $('#stepTags').innerHTML = tags.map((t) => `<span class="tag">${t}</span>`).join('');
+
+  const codeLangs = card.code ? Object.keys(card.code) : [];
+  if (codeLangs.length === 0) {
+    $('#codeBlock').textContent = '// No code for this step.';
+    $$('#codeTabs').forEach((c) => c.innerHTML = '');
+  } else {
+    showCodeBlock(card, codeLangs[0]);
+  }
+
+  // Check for token claims in any of the code blocks
+  const allText = codeLangs.map((l) => card.code[l]).join('\n');
+  if (allText.includes('"cti"') || allText.includes("'cti'") || allText.includes('cti:') || allText.includes('CIBA Token')) {
+    renderCibaClaims(card);
+  } else {
+    $('#jwtCard').hidden = true;
+  }
+
+  const focused = new Set([card.from]);
+  if (card.to !== card.from) focused.add(card.to);
+  $$('#actorsList .actor-row').forEach((row) => {
+    row.classList.toggle('active', focused.has(row.dataset.actor));
+  });
+}
+
+function renderCibaClaims(card) {
+  $('#jwtCard').hidden = false;
+  $('#tokenMeta').innerHTML = '<strong>CIBA access_token / id_token</strong> — issued by Keycloak after user approval';
+
+  const claims = [
+    { claim: 'iss', value: 'http://keycloak:8180/realms/ciba-realm', note: 'Token issuer — Keycloak realm URL' },
+    { claim: 'sub', value: 'user-uuid-1234', note: 'Subject — end user who authenticated via push' },
+    { claim: 'aud', value: '["ciba-agent"]', note: 'Audience — this client (agent) is authorized to use this token' },
+    { claim: 'exp', value: 'now + 300s', note: 'Expiration — short-lived, CIBA tokens expire quickly' },
+    { claim: 'iat', value: 'now', note: 'Issued at — when Keycloak issued the token' },
+    { claim: 'auth_req_id', value: 'AR-a1b2c3d4-...', note: 'CIBA Authentication Request ID — links token to specific CIBA request' },
+    { claim: 'cti', value: 'ciba-token-identifier-xyz', note: 'CIBA Token Identifier — MUST be validated by RS to prevent replay!' },
+    { claim: 'nonce', value: 'random-nonce', note: 'Nonce — random value to prevent replay attacks' },
+    { claim: 'scope', value: 'openid profile email calendar.read', note: 'Scopes granted by the user in the push approval' },
+    { claim: 'act', value: '{ sub: ciba-agent }', note: 'Actor (RFC 8693) — the agent acting ON BEHALF OF sub' },
+  ];
+
+  const rows = claims.map((c) => `
+    <tr>
+      <td><code>${escapeHtml(c.claim)}</code></td>
+      <td><code>${escapeHtml(c.value)}</code></td>
+      <td>${escapeHtml(c.note)}</td>
+    </tr>
+  `).join('');
+  $('#claimsTbody').innerHTML = rows;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[<>&"']/g, (c) => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;' })[c]);
+}
+
+function showCodeBlock(card, lang) {
+  const container = $('#codeTabs');
+  const langs = card.code ? Object.keys(card.code) : [];
+  const same = container._langs && container._langs.length === langs.length && container._langs.every((l, i) => l === langs[i]);
+  if (!same) {
+    container._langs = langs;
+    container._currentCard = card;
+    container.innerHTML = '';
+    langs.forEach((l) => {
+      const b = document.createElement('button');
+      b.className = 'code-tab';
+      b.dataset.lang = l;
+      b.textContent = l;
+      b.addEventListener('click', () => showCodeBlock(container._currentCard, l));
+      container.appendChild(b);
+    });
+  } else {
+    container._currentCard = card;
+  }
+  $$('#codeTabs .code-tab').forEach((t) => t.setAttribute('aria-selected', String(t.dataset.lang === lang)));
+  $('#codeBlock').textContent = card.code[lang];
+}
+
+function tick() {
+  const flow = FLOWS[state.flowId];
+  if (state.step < flow.steps.length - 1) {
+    state.step++;
+    renderStep(flow, state.step);
+    applyState($('#sequence'), flow, state.step);
+    $('#barFill').style.width = `${((state.step + 1) / flow.steps.length) * 100}%`;
+    if (state.playing) {
+      state.timer = setTimeout(tick, msForStep());
+    }
+  } else {
+    stop();
+  }
+}
+
+function play() {
+  const flow = FLOWS[state.flowId];
+  if (state.step >= flow.steps.length - 1) {
+    state.step = -1;
+  }
+  state.playing = true;
+  $('#btnPlay').lastElementChild.textContent = 'Pause';
+  tick();
+}
+
+function stop() {
+  state.playing = false;
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  $('#btnPlay').lastElementChild.textContent = 'Play';
+}
+
+function stepOnce() {
+  const flow = FLOWS[state.flowId];
+  if (state.step >= flow.steps.length - 1) return;
+  stop();
+  tick();
+}
+
+function reset() {
+  stop();
+  const flow = FLOWS[state.flowId];
+  state.step = -1;
+  renderStep(flow, -1);
+  applyState($('#sequence'), flow, -1);
+  $('#barFill').style.width = '0%';
+}
+
+function init() {
+  $$('.tab').forEach((b) =>
+    b.addEventListener('click', () => {
+      $$('.tab').forEach((x) => x.setAttribute('aria-selected', 'false'));
+      b.setAttribute('aria-selected', 'true');
+      setFlow(b.dataset.flow);
+    })
+  );
+
+  $('#btnPlay').addEventListener('click', () => { if (state.playing) stop(); else play(); });
+  $('#btnStep').addEventListener('click', stepOnce);
+  $('#btnReset').addEventListener('click', reset);
+  $('#speed').addEventListener('input', (e) => setSpeed(parseFloat(e.target.value)));
+
+  const ro = new ResizeObserver(() => { setFlow(state.flowId); });
+  ro.observe($('#svgHost'));
+
+  setSpeed(1);
+  setFlow(state.flowId);
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
