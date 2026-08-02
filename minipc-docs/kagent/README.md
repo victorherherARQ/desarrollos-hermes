@@ -1,52 +1,88 @@
 # Kagent — Solo.io AI Agent Framework
 
-## ⚠️ Estado: CRDs no instalables en MiniPC
+## ⚠️ Estado: Parcialmente instalable en MiniPC
 
-Los CRDs `agents.kagent.dev` (939 KB) y `sandboxagents.kagent.dev` (808 KB) superan el límite de 262 KB del API server de Kubernetes. **No se pueden instalar en kind ni k3d.**
+**kagent-controller NO puede desplegarse completamente** en el MiniPC por las limitaciones del API server de k3s.
 
-## Alternativa: Docker standalone
+## Qué es kagent
 
-kagent-controller puede ejecutarse como container Docker, ignorando la limitación de CRDs.
+Framework de agentes AI de **Solo.io** (Linux Foundation) para Kubernetes.
+
+- Extiende Kubernetes con CRDs: `Agent`, `SandboxAgent`, `ToolRegistration`, etc.
+- Modelo de agentes: define tools, pipes, harnesses
+- Integrado con MCP (Model Context Protocol)
+- Repo: https://github.com/kagent-dev/kagent
 
 ## Arquitectura
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  kagent Controller                  │
-│                                                      │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────┐ │
-│  │  Agent CRD   │  │ ModelProvider  │  │ MCP Hub  │ │
-│  │  (blocked!) │  │   Config       │  │          │ │
-│  └──────────────┘  └───────────────┘  └──────────┘ │
-│          ↓                  ↓               ↓       │
-│  ┌─────────────────────────────────────────────────┐ │
-│  │            k8s API / Docker runtime             │ │
-│  └─────────────────────────────────────────────────┘ │
-│                          ↓                          │
-│  ┌──────────────┐  ┌───────────────┐               │
-│  │  Agent Pod   │  │   LLM Provider │               │
-│  │  (Harness)  │  │  (OpenAI/etc) │               │
-│  └──────────────┘  └───────────────┘               │
-└─────────────────────────────────────────────────────┘
+Agent (CRD)
+├── Spec: modelo, tools, system prompt
+├── Status: phase, results, logs
+│
+├── Harness (link a SandboxAgent)
+│   └── SandboxAgent (CRD) — define runtime environment
+│
+└── ToolRegistration (CRD) — herramientas disponibles
 ```
 
-## CRDs instalables (funcionan)
+## Provider de LLM
 
-- ✅ `agentharnesses.kagent.dev` — Pod specs para agentes
-- ✅ `memories.kagent.dev` — Gestión de memoria
-- ✅ `modelconfigs.kagent.dev` — Config de modelos
-- ✅ `modelproviderconfigs.kagent.dev` — Providers (OpenAI, Anthropic, Ollama...)
-- ✅ `remotemcpservers.kagent.dev` — MCP servers remotos
-- ✅ `toolservers.kagent.dev` — Servidores de herramientas
+kagent soporta providers fijos:
+- `OpenAI`, `Anthropic`, `Ollama`, `Gemini`, `AzureOpenAI`
+- ❌ **MiniMax NO es first-class** — no hay enum para MiniMax
 
-## CRDs bloqueados (too large)
+**Solución conocida**: Usar `OpenAI` provider con `Endpoint` apuntando a MiniMax (OpenAI-compatible).
 
-- ❌ `agents.kagent.dev` — Agent orchestration
-- ❌ `sandboxagents.kagent.dev` — Sandbox workload management
+## Limitaciones en MiniPC
 
-## Recursos
+### Problema: CRDs demasiado grandes
 
-- Docs: https://kagent.dev/docs/getting-started/installation
-- Helm chart: `oci://ghcr.io/kagent-io/helm-charts/kagent`
+| CRD | Tamaño | Límite k8s | Resultado |
+|-----|--------|------------|-----------|
+| `agents.kagent.dev` | **939 KB** | 262 KB | ❌ Blocked |
+| `sandboxagents.kagent.dev` | **808 KB** | 262 KB | ❌ Blocked |
+
+El campo `metadata.annotations` en CRDs tiene límite de 262 KB en k8s.
+Los schemas de OpenAPI en estos CRDs generan annotations > 800 KB.
+
+### Soluciones
+
+1. **k3s/k3d en producción real**: Los CRDs caben en EKS/GKE con límites mayores
+2. **Modificar los CRDs**: Truncar descripciones de schemas (requiere esfuerzo significativo)
+3. **Docker standalone**: Desplegar kagent como container sin k8s CRDs
+
+## CRDs que SÍ se pueden instalar (6/8)
+
+```
+agentharnesses.kagent.dev ✅
+toolregistrations.kagent.dev ✅
+resolvedtoolpipes.kagent.dev ✅
+resolvedagentpipes.kagent.dev ✅
+registeredagentpipes.kagent.dev ✅
+resolvedtoolinvocations.kagent.dev ✅
+```
+
+## Comparativa con agentgateway
+
+| Aspecto | kagent | agentgateway |
+|---------|--------|-------------|
+| Paradigma | Kubernetes CRD-native | Gateway REST |
+| Instalación | Helm + k8s CRDs | Binary standalone |
+| Complejidad | Alta (CRDs + controller) | Baja |
+| LLM providers | Enum fijo (no MiniMax first-class) | Custom (cualquier OpenAI-compatible) |
+| MiniPC compatible | ❌ (CRDs grandes) | ✅ |
+| Flexibilidad | ✅ CRDs descriptivos | ✅ YAML config |
+| MCP support | ✅ | ✅ |
+| Horizonte | Enterprise multi-agent | Ligero, PoC, local |
+
+## Recomendación
+
+Para el MiniPC: **usar agentgateway** (ya funcionando).
+Para producción cloud: **evaluar kagent** con cluster que soporte CRDs grandes.
+
+## Enlaces
+
 - Repo: https://github.com/kagent-dev/kagent
-- Helm chart (CRDs): `oci://ghcr.io/kagent-io/helm-charts/kagent-crds`
+- Helm charts OCI: `ghcr.io/kagent-io/helm-charts/*`
+- Docs: https://solo.io/docs/kagent

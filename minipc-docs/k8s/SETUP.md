@@ -8,9 +8,12 @@ k3s:     v1.35.5+k3s1
 k3d:     v5.9.0
 Nodes:   1 server (no agents)
 API:     https://localhost:6550
+Ingress: http://localhost:9080 / https://localhost:9443
+kubectl: /tmp/kubectl (v1.32.0)
+kubeconfig: ~/.kube/config (merged con fix localhost)
 ```
 
-## Instalación
+## Instalación completa
 
 ### 1. Prerrequisitos
 
@@ -18,83 +21,97 @@ API:     https://localhost:6550
 - WSL2 con Ubuntu 24.04
 - Usuario en grupo `docker`
 
-### 2. Instalar k3d (sin sudo)
+### 2. Instalar k3d
 
 ```bash
-# Descargar binary directamente
+# Binary directo (sin sudo)
 curl -fsSL https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64 -o /tmp/k3d
 chmod +x /tmp/k3d
-
-# Mover a PATH
-sudo mv /tmp/k3d /usr/local/bin/k3d   # si tienes sudo
-# o
-cp /tmp/k3d ~/bin/k3d
-export PATH=$PATH:~/bin
 ```
 
 ### 3. Crear cluster
 
 ```bash
-# El puerto 8080 está ocupado por structurizr-c4-viewer
-# Usamos puertos alternativos
-
-k3d cluster create minipc \
+# Puerto 8080 ocupado por structurizr-c4-viewer — usamos alternativos
+/tmp/k3d cluster create minipc \
   --api-port 6550 \
   -p "9080:80@loadbalancer" \
   -p "9443:443@loadbalancer" \
   --k3s-arg "--disable=traefik@server:0"
 ```
 
-> **Nota**: El loadbalancer de k3d mapea puertos del host al cluster. Con los puertos elegidos:
-> - `http://localhost:9080` → Ingress del cluster
-> - `https://localhost:9443` → Ingress TLS del cluster
+El loadbalancer mapea:
+- `http://localhost:9080` → Ingress del cluster
+- `https://localhost:9443` → Ingress TLS
 
-### 4. Obtener kubeconfig
-
-```bash
-# Kubeconfig default de k3d
-k3d kubeconfig get minipc > ~/.kube/config.minipc
-
-# FIX: k3d genera "0.0.0.0:6550" como server — hay que cambiarlo
-sed 's|https://0\.0\.0\.0:6550|https://localhost:6550|g' \
-  ~/.kube/config.minipc > ~/.kube/config
-
-# Verificar
-export KUBECONFIG=~/.kube/config
-kubectl get nodes
-```
-
-### 5. kubectl (sin sudo)
+### 4. kubectl (sin sudo)
 
 ```bash
-# Instalar kubectl
 curl -fsSL https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl \
-  -o ~/bin/kubectl
-chmod +x ~/bin/kubectl
-
-# o usar el de k3d
-/tmp/k3d kubeconfig get minipc > /tmp/kubeconfig
-/tmp/k3d kubeconfig get minipc | sed 's|0\.0\.0\.0|localhost|g' > ~/.kube/config
+  -o /tmp/kubectl
+chmod +x /tmp/kubectl
 ```
 
-## Verificar cluster
+### 5. Fix kubeconfig y verificar
 
 ```bash
-kubectl --kubeconfig=~/.kube/config get nodes
-kubectl --kubeconfig=~/.kube/config get ns
+# k3d genera "https://0.0.0.0:6550" — TLS handshake falla con 0.0.0.0
+# Cambiar a localhost
+/tmp/k3d kubeconfig get minipc | \
+  sed 's|https://0\.0\.0\.0:6550|https://localhost:6550|g' > ~/.kube/config
+
+# Verificar cluster
+export KUBECONFIG=~/.kube/config
+/tmp/kubectl --kubeconfig=$KUBECONFIG get nodes
 ```
 
+Output esperado:
 ```
 NAME                  STATUS   ROLES           AGE   VERSION
 k3d-minipc-server-0   Ready    control-plane   40m   v1.35.5+k3s1
 ```
 
-## Servicios instalados
+## CRDs instalados
 
-| Namespace | Servicio | Nota |
-|---|---|---|
-| default | k3d-minipc-server-0 | control-plane |
-| kube-system | coredns, traefik, local-path-provisioner | k3s components |
+### ✅ Exitosos (6/8)
+
+| CRD | Estado | Notas |
+|-----|--------|-------|
+| `agentharnesses.kagent.dev` | ✅ | |
+| `toolregistrations.kagent.dev` | ✅ | |
+| `resolvedtoolpipes.kagent.dev` | ✅ | |
+| `resolvedagentpipes.kagent.dev` | ✅ | |
+| `registeredagentpipes.kagent.dev` | ✅ | |
+| `resolvedtoolinvocations.kagent.dev` | ✅ | |
+
+### ❌ Bloqueados (2/8) — límite 262KB por annotation
+
+| CRD | Tamaño | Error |
+|-----|--------|-------|
+| `agents.kagent.dev` | 939 KB | `metadata.annotations: Too long: may not be more than 262144 bytes` |
+| `sandboxagents.kagent.dev` | 808 KB | Mismo error |
+
+## Comandos útiles
+
+```bash
+# Ver nodos
+/tmp/kubectl --kubeconfig=~/.kube/config get nodes -o wide
+
+# Ver namespaces
+/tmp/kubectl --kubeconfig=~/.kube/config get ns
+
+# Ver pods de sistema
+/tmp/kubectl --kubeconfig=~/.kube/config get pods -n kube-system
+
+# Ver CRDs
+/tmp/kubectl --kubeconfig=~/.kube/config get crds
+
+# Ver logs del API server
+/tmp/kubectl --kubeconfig=~/.kube/config logs -n kube-system -l component=kube-apiserver --tail=20
+
+# Eliminar cluster
+/tmp/k3d cluster delete minipc
+```
 
 ## Problemas conocidos
 
@@ -104,16 +121,31 @@ k3d-minipc-server-0   Ready    control-plane   40m   v1.35.5+k3s1
 ERRO[0025] Failed to start: Bind for 0.0.0.0:8080 failed: port is already allocated
 ```
 
-**Solución**: Usar puertos alternativos (9080/9443 en vez de 8080/443).
+**Solución**: Usar puertos alternativos (9080/9443).
 
-### CRDs muy grandes en kind
+### CRDs kagent muy grandes
 
-Los CRDs `agents.kagent.dev` y `sandboxagents.kagent.dev` pesan ~900KB cada uno.
-El API server de kind rechaza CRDs con annotations > 262KB.
-k3d tiene el mismo límite. **kagent-controller no puede desplegarse como CRD en este entorno.**
+Los CRDs `agents` y `sandboxagents` contienen schemas de OpenAPI enormes.
+El límite de annotations en k8s es 262 KB. **No hay workaround en k3d/kind.**
 
-## Limpieza
+**Solución real**: 
+- Modificar los CRDs truncando descripciones de schemas (no trivial)
+- Usar un cluster cloud (EKS/GKE) con límites mayores
+- Deploy kagent-controller como container Docker (sin k8s CRDs)
 
-```bash
-k3d cluster delete minipc
+## Arquitectura del cluster
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  k3d-minipc (1 server node)                                │
+│                                                             │
+│  kube-system                                               │
+│  ├── coredns            DNS cluster                        │
+│  ├── traefik            Ingress (deshabilitado)            │
+│  ├── local-path-provisioner   Storage local              │
+│  └── metrics-server    Métricas                          │
+│                                                             │
+│  kube-node-lease        Heartbeats nodos                  │
+│  default                                                 │
+└─────────────────────────────────────────────────────────────┘
 ```
