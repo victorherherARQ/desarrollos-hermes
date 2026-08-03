@@ -1,0 +1,83 @@
+{
+  "title": "Flow C — JWT Authorization Grant (Agent + Keycloak)",
+  "actors": [
+    { "id": "user",   "label": "User (ana)",       "type": "external" },
+    { "id": "agent",  "label": "AI Agent",         "type": "internal" },
+    { "id": "idp",    "label": "Keycloak (IdP)",   "type": "internal" },
+    { "id": "api",    "label": "Spring Boot API",  "type": "internal" }
+  ],
+  "steps": [
+    {
+      "n": 1,
+      "from": "user",
+      "to": "agent",
+      "label": "Authentication request",
+      "detail": "User authenticates to the agent (biometric, password, etc.)",
+      "duration_ms": 1000
+    },
+    {
+      "n": 2,
+      "from": "agent",
+      "to": "idp",
+      "label": "Token request — client_assertion (HS256)",
+      "detail": "POST /realms/agent-poc/protocol/openid-connect/token\ngrant_type=client_credentials\nclient_id=agente-ia\nclient_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer\nclient_assertion=<JWT HS256 firmado con AGENT_CLIENT_SECRET>",
+      "duration_ms": 1200
+    },
+    {
+      "n": 3,
+      "from": "idp",
+      "to": "agent",
+      "label": "Initial client token",
+      "detail": "200 OK\n{ \"access_token\": \"<JWT>\", \"expires_in\": 300 }",
+      "duration_ms": 1000
+    },
+    {
+      "n": 4,
+      "from": "agent",
+      "to": "agent",
+      "label": "Build identity_assertion (RS256)",
+      "detail": "Header: { \"alg\":\"RS256\", \"typ\":\"JWT\", \"kid\":\"<key-id>\" }\nPayload: {\n  \"iss\":\"<idp-issuer>\",\n  \"aud\":\"<realm-token-endpoint>\",\n  \"sub\":\"<user-id>\",\n  \"exp\":..., \"iat\":...,\n  \"requested_scope\":\"email.send\"\n}\nSign with RSA private key, kid header matches KC's publicKeySignatureVerifierKeyId.",
+      "duration_ms": 1400
+    },
+    {
+      "n": 5,
+      "from": "agent",
+      "to": "idp",
+      "label": "JWT Authorization Grant",
+      "detail": "POST /realms/agent-poc/protocol/openid-connect/token\ngrant_type=urn:ietf:params:oauth:grant-type:jwt-bearer\nassertion=<RS256 identity_assertion>\nscope=email.send\nclient_assertion=<HS256 fresh>",
+      "duration_ms": 1500
+    },
+    {
+      "n": 6,
+      "from": "idp",
+      "to": "agent",
+      "label": "User-scoped access_token (BUG: all scopes)",
+      "detail": "200 OK\n{ \"access_token\": \"<JWT>\", \"scope\": \"email.send email.modify email profile calendar.read calendar.write\" }\n⚠️ KC 26.6.4 broker jwt-bearer ignores scope param; returns union of all client scopes.",
+      "duration_ms": 1200
+    },
+    {
+      "n": 7,
+      "from": "agent",
+      "to": "user",
+      "label": "Identity poll response + requested_scope_token",
+      "detail": "{\n  \"access_token\":\"<JWT>\",\n  \"requested_scope_token\": \"<HS256 {user_id, scope, agent_principal, iat, exp}>\"\n}",
+      "duration_ms": 1000
+    },
+    {
+      "n": 8,
+      "from": "user",
+      "to": "api",
+      "label": "Resource request with both tokens",
+      "detail": "GET /api/email/send\nAuthorization: Bearer <access_token>\nX-Requested-Scope-Token: <requested_scope_token>",
+      "duration_ms": 1200
+    },
+    {
+      "n": 9,
+      "from": "api",
+      "to": "api",
+      "label": "Scope downscoping filter",
+      "detail": "RequestedScopeFilter validates HS256 + intersects scope ∩ requested_scope.\nFinal authority set: SCOPE_email.send (drop the rest).\n200 OK",
+      "duration_ms": 1200
+    }
+  ]
+}

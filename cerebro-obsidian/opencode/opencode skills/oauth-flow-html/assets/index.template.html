@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>__TITLE__</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body data-theme="dark">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" class="logo" aria-hidden="true">
+        <path fill="currentColor" d="M12 1.5 3 5v6.4c0 4.5 3.2 8.6 9 11 5.8-2.4 9-6.5 9-11V5l-9-3.5z"/>
+      </svg>
+      <div>
+        <div class="title" id="flow-title">__TITLE__</div>
+        <div class="subtitle">Generado por la skill <code>oauth-flow-html</code></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="btn-play" class="ctrl-btn" aria-label="Reproducir">▶</button>
+      <button id="btn-pause" class="ctrl-btn" aria-label="Pausar" disabled>⏸</button>
+      <button id="btn-reset" class="ctrl-btn" aria-label="Reiniciar">↺</button>
+      <label class="speed-label">
+        Velocidad
+        <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1" />
+        <span id="speed-value">1.0×</span>
+      </label>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="diagram">
+      <div id="actors" class="actors"></div>
+      <svg id="canvas" class="canvas" aria-label="Diagrama de secuencia"></svg>
+    </section>
+
+    <aside class="sidebar">
+      <h3 id="step-title">Paso</h3>
+      <p id="step-label" class="step-label"></p>
+      <details id="step-payload" open>
+        <summary>Detalle</summary>
+        <pre id="step-detail"><code></code></pre>
+      </details>
+      <div class="step-nav">
+        <button id="prev-step" class="ctrl-btn">‹ Anterior</button>
+        <button id="next-step" class="ctrl-btn">Siguiente ›</button>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footbar">
+    <span id="step-counter">0 / 0</span>
+    <span class="muted">Click en cualquier paso para inspeccionarlo.</span>
+  </footer>
+
+  <script>window.__FLOWS__ = __FLOWS_PLACEHOLDER__;</script>
+  <script src="./render.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
