@@ -22,7 +22,8 @@ BASE_URL = "https://www.football-data.co.uk"
 
 FD2ID: dict[str, str] = {
     "alaves": "alaves", "athletic bilbao": "ath_bilbao", "ath bilbao": "ath_bilbao",
-    "atletico madrid": "atl_madrid", "atl madrid": "atl_madrid",
+    "atletico madrid": "ath_madrid", "atl madrid": "ath_madrid", "ath madrid": "ath_madrid",
+    "elche": "elche", "vallecano": "vallecano",
     "barcelona": "barcelona", "betis": "betis", "celta": "celta",
     "cordoba": "cordoba", "deportivo": "la_coruna",
     "eibar": "eibar", "espanol": "espanol", "espanyol": "espanol",
@@ -111,9 +112,9 @@ def run(seasons: int = 5) -> int:
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
 
-    cur.execute("DROP TABLE IF EXISTS match_odds")
-    cur.execute(f"""
-        CREATE TABLE match_odds (
+    # Idempotent: solo crear tabla si no existe; usar INSERT OR IGNORE luego
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS match_odds (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             match_id INTEGER,
             season TEXT,
@@ -171,8 +172,14 @@ def run(seasons: int = 5) -> int:
     total = 0
     client = httpx.Client(headers=HEADERS, timeout=30)
     for year, season_code, div, url in recent:
-        r = client.get(url)
-        rows = list(csv.DictReader(StringIO(r.text)))
+        # Preferir CSV local si ya está descargado (data/raw/football-data/SP1_YYZZ.csv o SP2_YYZZ.csv)
+        local = Path(__file__).parent.parent / "data" / "raw" / "football-data" / f"{div}_{season_code}.csv"
+        if local.exists():
+            log.info(f"{season_code} {div}: usando CSV local {local}")
+            rows = list(csv.DictReader(open(local, 'r', encoding='utf-8-sig')))
+        else:
+            r = client.get(url)
+            rows = list(csv.DictReader(StringIO(r.text)))
         inserted = 0
         for rec in rows:
             ht = rec.get("HomeTeam", "").strip().lower()

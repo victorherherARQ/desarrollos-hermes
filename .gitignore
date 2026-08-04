@@ -1,2 +1,41 @@
+# Specific files
 PENDIENTES.md
 .hermes/
+
+# Databases (binarios cambian en cada ejecución)
+*.db
+*.sqlite
+*.sqlite3
+
+# Virtualenvs
+venv/
+.venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Node / frontend builds
+node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Java / Maven
+target/
+*.jar
+
+# Datos descargados grandes (CSV raw, snapshots, etc.)
+# Mantener directorios, ignorar el contenido
+quiniela-analyzer/data/raw/football-data/
+
+# Backups
+backups/
+
+# Datos de runtime efímeros
+*.log
+*.pid
+*.sock
