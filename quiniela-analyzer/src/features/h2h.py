@@ -17,7 +17,7 @@ Features generadas (N=5, N=10):
     h2h{N}_home_unbeaten_rate  (wins_home + draws_home) / played
     h2h{N}_home_dominance  wins_home - losses_home
 
-Importante: el c\u00e1lculo es "rolling window" sobre partidos ANTERIORES a la fecha
+Importante: el cálculo es "rolling window" sobre partidos ANTERIORES a la fecha
 del partido objetivo. Sin leakage temporal.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ def h2h_matches(
     as_of_date: str,
     limit: int = 30,
 ) -> list[dict]:
-    """Devuelve los \u00faltimos `limit` partidos entre home_team y away_team
+    """Devuelve los últimos `limit` partidos entre home_team y away_team
     anteriores a as_of_date, en cualquier local/visitante.
     """
     rows = conn.execute(
@@ -93,7 +93,7 @@ def h2h_for_match(
     as_of_date: str,
     n: int = 5,
 ) -> dict:
-    """Calcula features h2h sobre los \u00faltimos N partidos entre estos dos equipos."""
+    """Calcula features h2h sobre los últimos N partidos entre estos dos equipos."""
     history = h2h_matches(conn, home_team, away_team, as_of_date=as_of_date, limit=n)
 
     if not history:
@@ -151,13 +151,13 @@ def h2h_features_for_match(
     return out
 
 
-# \u2500\u2500 Smoke test \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# ── Smoke test ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
-    print("=== Test 1: 'El Cl\u00e1sico' (Barcelona vs Real Madrid) ===")
+    print("=== Test 1: 'El Clásico' (Barcelona vs Real Madrid) ===")
     row = conn.execute(
         "SELECT match_id, season, division, matchday_date, home_team, away_team "
         "FROM matches WHERE (home_team='real_madrid' AND away_team='barcelona') "

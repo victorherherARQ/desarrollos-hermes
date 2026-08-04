@@ -55,9 +55,7 @@ def create_table(cur: sqlite3.Cursor) -> None:
     cols_ddl: list[str] = ["match_id INTEGER NOT NULL"]
     for n in W_NS:
         for c in H2H_BASE_COLS:
-            if "played" in c and "avg" not in c or c in (
-                "wins_home", "draws_home", "losses_home", "home_dominance"
-            ):
+            if c in ("played", "wins_home", "draws_home", "losses_home", "home_dominance"):
                 cols_ddl.append(f"h2h{n}_{c} INTEGER")
             else:
                 cols_ddl.append(f"h2h{n}_{c} REAL")
@@ -141,7 +139,6 @@ def run(batch_size: int = 500) -> None:
     elapsed = time.time() - t0
     log.info(f"Total insertados: {inserted}, skipped: {skipped}, elapsed: {elapsed:.1f}s")
 
-    # Verificación
     n = cur.execute("SELECT COUNT(*) FROM match_h2h").fetchone()[0]
     log.info(f"match_h2h tiene {n} filas")
 
@@ -153,7 +150,7 @@ def run(batch_size: int = 500) -> None:
             f"SELECT COUNT(*) FROM match_h2h WHERE h2h{n_val}_played >= ?",
             (n_val,),
         ).fetchone()[0]
-        log.info(f"  h2h{n_val}: con ≥1 partido h2h={played_ge1}/{n} ({100*played_ge1/n:.1f}%), con ≥{n_val}={played_geq_n} ({100*played_geq_n/n:.1f}%)")
+        log.info(f"  h2h{n_val}: con ≥1 h2h={played_ge1}/{n} ({100*played_ge1/n:.1f}%), con ≥{n_val}={played_geq_n} ({100*played_geq_n/n:.1f}%)")
 
     conn.close()
 
