@@ -31,8 +31,13 @@ J1_2627_FIXTURES = [
     ("2026-08-17", "espanol", "ath_madrid", 3.40, 3.30, 2.15),
     ("2026-08-18", "real_madrid", "osasuna", 1.20, 7.00, 15.0),
     ("2026-08-18", "betis", "eibar", 1.65, 3.80, 5.50),
-    ("2026-08-18", "rayo_vallecano", "leganes", 1.95, 3.40, 4.00),
-    ("2026-08-18", "espanyol", "valladolid", 2.10, 3.30, 3.50),
+    # LA LIGA 2 / SEGUNDA (4 partidos, 15-16 ago, ya están en líneas siguientes)
+    ("2026-08-15", "sporting", "almeria", 2.30, 3.20, 3.10),
+    ("2026-08-15", "elche", "tenerife", 1.95, 3.40, 3.90),
+    ("2026-08-16", "granada", "zaragoza", 2.50, 3.10, 2.80),
+    ("2026-08-16", "santander", "castellon", 1.85, 3.50, 4.20),
+    # INTERNACIONAL (1 partido Premier, 16-ago)
+    ("2026-08-16", "man_city", "liverpool", 2.20, 3.40, 3.10),
 ]
 
 
