@@ -38,13 +38,12 @@ def get_jornada(conn: sqlite3.Connection, jornada: int, season: str = "2627") ->
 
 
 def get_matches(conn: sqlite3.Connection, fecha_sabado: str, fecha_lunes: str) -> list[dict]:
-    """Devuelve partidos de LaLiga en el rango de la jornada."""
+    """Devuelve partidos de LaLiga en el rango de la jornada (incluye futuros sin result)."""
     rows = conn.execute(
         """
         SELECT match_id, matchday_date, home_team, away_team, result
         FROM matches
         WHERE matchday_date BETWEEN ? AND ?
-              AND result IS NOT NULL
         ORDER BY matchday_date, match_id
         """,
         (fecha_sabado, fecha_lunes),
