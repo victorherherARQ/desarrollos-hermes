@@ -1,17 +1,18 @@
 ---
-estado: bloqueado
+estado: cerrado
 fecha_inicio: 2025-06-01
+fecha_cierre: 2026-08-06
 personas: [Victor]
-tags: [proyecto/bloqueado, area/trabajo]
+tags: [proyecto/cerrado, area/trabajo]
 ---
 
-# quiniela-analyzer
+# quiniela-analyzer (CERRADO)
 
 ## Descripción
-Análisis predictivo de La Quiniela (Quiniela/14) usando ML.
+Análisis predictivo de La Quiniela (Quiniela/14) usando ML. **Cerrado 2026-08-06**.
 
 ## Estado
-🚧 **v7 cerrado** — AvgH confirmado como techo (50.12% baseline). v3-v7 todos NO-GO.
+🔒 **Cerrado definitivamente** — Plan v3-v7 NO-GO confirmado. AvgH 50.12% techo con datos públicos.
 
 ## Stack
 - Python 3.11
