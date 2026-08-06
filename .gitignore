@@ -39,3 +39,7 @@ backups/
 *.log
 *.pid
 *.sock
+
+# Subcarpetas con su propio repo distribuible (no trackear .git interno)
+# Caso: sistema-trabajo-sync — repo privado separado victorherherARQ/sistema-trabajo-sync
+sistema-trabajo-sync/.git/
