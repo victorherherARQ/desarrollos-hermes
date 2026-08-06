@@ -1,66 +1,210 @@
+# Investigación completada (2026-08-06)
+
+## ✅ Recomendación justificada
+
+**Empezar con Google Calendar API directa en Python** (no Apps Script, no MCP, no Zapier):
+
+| Criterio | API directa | Apps Script | MCP | Zapier |
+|----------|-------------|-------------|-----|--------|
+| Tiempo inicial | 1-3h | 30-90m | 1-4h | 30m-2h |
+| Coste | Gratis | Gratis | Gratis | Pago mensual |
+| Adecuación para Hermes | **Muy alta** | Alta (prototipo) | Alta | Media |
+| Control | Total | Limitado | Comunitario | Bajo |
+| Seguridad | OAuth local | Webhook público | Variable | Cloud |
+
+**Razones**:
+- No depende de servicios cloud de pago
+- Permite leer, crear, modificar y borrar eventos
+- OAuth token se guarda local en WSL (`~/.hermes/calendar/`)
+- Arquitectura evolucionable: Python hoy, MCP server mañana
+
+## 🏗️ Arquitectura recomendada
+
+```
+Hermes (con memoria + tools)
+  │
+  ├── Lee notas del vault Obsidian
+  │
+  ├── Detecta tareas con frontmatter `calendar: true`
+  │
+  └── Ejecuta calendar_cli.py
+          │
+          └── Google Calendar API via OAuth 2.0
+                  │
+                  └── Calendar principal de Víctor
+```
+
+## 🔧 Setup paso a paso
+
+### 1. Google Cloud Console
+
+```text
+1. https://console.cloud.google.com/
+2. Crear proyecto "hermes-calendar"
+3. APIs & Services → Library → Google Calendar API → Enable
+4. OAuth consent screen → External → añadir email Víctor como test user
+5. Credentials → Create → OAuth client ID → Desktop app
+6. Descargar JSON como calendar-credentials.json
+```
+
+```bash
+# Mover a directorio seguro
+mkdir -p /home/vhdez/.hermes/calendar
+mv ~/Downloads/calendar-credentials.json /home/vhdez/.hermes/calendar/
+chmod 600 /home/vhdez/.hermes/calendar/calendar-credentials.json
+```
+
+### 2. Venv con dependencias
+
+```bash
+cd /home/vhdez/.hermes/calendar
+python3 -m venv .venv
+source .venv/bin/activate
+pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+```
+
+### 3. .gitignore estricto
+
+```gitignore
+calendar-credentials.json
+token.json
+.venv/
+```
+
+## 💻 Código Python funcional (60 líneas)
+
+Archivo: `/home/vhdez/.hermes/calendar/calendar_demo.py`
+
+```python
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import os
+
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+
+BASE = Path(__file__).parent
+CLIENT_SECRET = BASE / "calendar-credentials.json"
+TOKEN = BASE / "token.json"
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+
+def service():
+    creds = None
+    if TOKEN.exists():
+        creds = Credentials.from_authorized_user_file(str(TOKEN), SCOPES)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(CLIENT_SECRET), SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        TOKEN.write_text(creds.to_json())
+        os.chmod(TOKEN, 0o600)
+    return build("calendar", "v3", credentials=creds)
+
+
+def list_events(calendar_id="primary", limit=10):
+    now = datetime.now(timezone.utc).isoformat()
+    res = service().events().list(
+        calendarId=calendar_id, timeMin=now,
+        maxResults=limit, singleEvents=True, orderBy="startTime"
+    ).execute()
+    for e in res.get("items", []):
+        start = e["start"].get("dateTime", e["start"].get("date"))
+        print(start, "-", e.get("summary", "(sin título)"))
+
+
+def create_event(title, start, minutes=30, calendar_id="primary"):
+    end = start + timedelta(minutes=minutes)
+    body = {
+        "summary": title,
+        "start": {"dateTime": start.isoformat(), "timeZone": "Europe/Madrid"},
+        "end": {"dateTime": end.isoformat(), "timeZone": "Europe/Madrid"},
+        "reminders": {"useDefault": False, "overrides": [
+            {"method": "popup", "minutes": 10},
+            {"method": "email", "minutes": 60},
+        ]},
+    }
+    ev = service().events().insert(calendarId=calendar_id, body=body).execute()
+    print("Creado:", ev["htmlLink"])
+
+
+if __name__ == "__main__":
+    create_event(
+        "Recordatorio Hermes",
+        datetime(2026, 8, 7, 10, 0),
+        minutes=30,
+    )
+    list_events()
+```
+
+## 🔌 Integración con vault Obsidian
+
+Plantilla YAML para tareas con calendario:
+
+```yaml
 ---
-fecha_creada: 2026-08-06
-prioridad: media
-persona: Victor
-proyecto: ""
-fecha_limite: ""
-tags: [tarea/pendiente, prioridad/media]
+calendar: true
+start: 2026-08-07T10:00:00+02:00
+duration: 45
+reminder: 15
+google_event_id: ""  # se rellena tras crear
 ---
+```
 
-# Investigar integración Hermes con Google Calendar
+Flujo automático propuesto (`calendar_sync.py`):
 
-Cómo integrarme con Google Calendar para gestionar recordatorios automáticos a Víctor.
+```text
+1. Recorre /home/vhdez/desarrollos-hermes/cerebro-obsidian/obsidian-vault/**/*.md
+2. Filtrar por frontmatter `calendar: true`
+3. Si google_event_id == "" → create_event
+4. Si google_event_id != "" → update_event (compara start/title)
+5. Log resultado en /home/vhdez/.hermes/calendar/sync.log
+6. Cron cada 30 min: 0,30 * * * *
+```
 
-## Objetivo
+## 📋 Roadmap ejecución
 
-Que yo (Hermes) pueda:
-- Crear eventos en el calendario de Víctor
-- Leer eventos próximos para contexto
-- Configurar recordatorios automáticos (cron jobs, deadlines)
-- Vincular eventos con tareas del vault (`Tareas/*.md`)
+| Fase | Acción | ETA |
+|------|--------|-----|
+| **Fase 1** | Setup Google Cloud + calendar_demo.py funcional | 1h |
+| **Fase 2** | calendar_cli.py con subcommands (list/create/sync-vault) | 1h |
+| **Fase 3** | calendar_sync.py que lee vault y crea eventos | 1h |
+| **Fase 4** | Cron cada 30 min para sync automático | 30m |
+| **Fase 5** | Integrar como tool de Hermes (request_user_confirm antes de crear) | 1h |
 
-## Opciones técnicas
+## 🔒 Seguridad
 
-### Opción A: Google Calendar API directa
-- OAuth 2.0 con Google
-- Endpoints REST: `calendar.events.list`, `calendar.events.insert`
-- Requiere credenciales OAuth en Google Cloud Console
-- Scope: `https://www.googleapis.com/auth/calendar`
+1. NO subir `calendar-credentials.json` ni `token.json` al repo
+2. `chmod 600` en ambos archivos
+3. Scope mínimo: `https://www.googleapis.com/auth/calendar` (no `gmail` ni `drive`)
+4. Confirmar manualmente antes de crear eventos en Fase 1
+5. Revocar credenciales en https://myaccount.google.com/permissions si compromete
 
-### Opción B: Apps Script + Webhook
-- Crear un Apps Script público en la cuenta de Víctor
-- Hermes envía webhook → Apps Script crea evento
-- Más simple, menos código backend
+## 🌐 Endpoints relevantes
 
-### Opción C: MCP server de Google Calendar
-- Si hay MCP server oficial/comunitario
-- Integración nativa con agentes
-- Buscar: `modelcontextprotocol/google-calendar`
+- Google Calendar API: https://developers.google.com/workspace/calendar/api
+- Quickstart Python: https://developers.google.com/workspace/calendar/api/quickstart/python
+- events.list: https://developers.google.com/workspace/calendar/api/v3/reference/events/list
+- events.insert: https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
+- OAuth scopes: https://developers.google.com/calendar/api/auth
+- Cloud Console: https://console.cloud.google.com/
 
-### Opción D: n8n / Zapier / Make
-- Workflows visuales
-- Trigger: "nueva tarea en cerebro-obsidian" → crear evento
-- Sin código, pero cloud-based
+## MCP servers encontrados (no usar ahora)
 
-## Pasos a seguir
+| Proyecto | URL | Notas |
+|----------|-----|-------|
+| taylorwilsdon/google_workspace_mcp | github.com/taylorwilsdon/google_workspace_mcp | Workspace completo |
+| takumi0706/google-calendar-mcp | github.com/takumi0706/google-calendar-mcp | Calendar focus |
+| @cocal/google-calendar-mcp | npmjs.com/package/@cocal/google-calendar-mcp | npm package |
 
-- [ ] Investigar opciones B y C (las más rápidas)
-- [ ] Crear OAuth credentials (si opción A)
-- [ ] Test integración: crear evento de prueba
-- [ ] Diseñar casos de uso:
-  - [ ] Recordatorios para deadlines de tareas
-  - [ ] Resumen diario 9 AM con eventos del día
-  - [ ] Auto-crear evento para reuniones
+**Recomendación**: validar primero con script Python. Si funciona, exponer como MCP server propio.
 
-## Notas
+## ✨ Decisión
 
-- Google Calendar API requiere proyecto en Google Cloud Console
-- Victor tiene cuenta Gmail (asumido) → puede crear OAuth app personal
-- Restricción: solo eventos del calendario primario (no compartidos)
-- Free tier: 1M queries/día (más que suficiente)
-
-## Referencias
-
-- [Google Calendar API](https://developers.google.com/calendar/api/v3/reference)
-- [OAuth 2.0 Setup](https://developers.google.com/calendar/api/quickstart/python)
-- [MCP servers](https://github.com/modelcontextprotocol/servers)
+Empezar implementación **Fase 1+2** esta semana (2h total). Decidir Fase 3-5 según resultado.
