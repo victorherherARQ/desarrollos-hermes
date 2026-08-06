@@ -1,3 +1,8 @@
+---
+area: ai
+tags: [tema/investigacion, area/trabajo]
+---
+
 # LLMs — Modelos de Lenguaje
 
 ## Providers Cloud
@@ -16,6 +21,3 @@
 - Q4_K_M — Mejor balance calidad/tamaño
 - Q4_0 — Más pequeño, algo de calidad
 - IQ4_XS — Inteligente, muy pequeña
-
-## Tags
-#tema #llm #ai

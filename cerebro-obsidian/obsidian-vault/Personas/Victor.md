@@ -1,3 +1,12 @@
+---
+rol: Desarrollador
+empresa: Personal
+email: victorherher@gmail.com
+telefono: ""
+fecha_alta: 2026-08-06
+tags: [persona/contacto]
+---
+
 # Victor
 
 ## Datos
@@ -6,12 +15,10 @@
 - **Ubicación**: Madrid
 - **Telegram**: @vhdez
 
-## Tags
-#persona #victor
-
 ## Proyectos
 - [[../Proyectos/agentgateway-poc]]
 - [[../Proyectos/minipc-docs]]
 - [[../Proyectos/synchealth]]
+- [[../Proyectos/quiniela-analyzer]]
 
 ## Notas

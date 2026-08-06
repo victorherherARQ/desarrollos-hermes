@@ -1,3 +1,10 @@
+---
+estado: activo
+fecha_inicio: 2025-01-01
+personas: [Victor]
+tags: [proyecto/activo, area/trabajo]
+---
+
 # synchealth
 
 ## Descripción
@@ -15,5 +22,10 @@ Sistema de sincronización de datos de salud (Fitbit, Garmin, Google Fit).
 ## Ubicación
 `/home/vhdez/desarrollos-hermes/synchealth/`
 
-## Tags
-#proyecto #health #api
+## Tareas asociadas
+
+```dataview
+LIST
+FROM "Tareas"
+WHERE contains(proyecto, "synchealth")
+```

@@ -1,3 +1,8 @@
+---
+area: security
+tags: [tema/investigacion, area/trabajo]
+---
+
 # OAuth 2.0
 
 ## Flows
@@ -17,5 +22,10 @@
 - Auth0 — Cloud
 - Azure AD B2C — Microsoft
 
-## Tags
-#tema #oauth #security
+## Proyectos relacionados
+
+```dataview
+LIST
+FROM "Proyectos"
+WHERE contains(tags, "#proyecto/activo") AND contains(file.name, "oauth")
+```

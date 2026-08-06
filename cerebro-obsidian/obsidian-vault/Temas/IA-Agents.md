@@ -1,10 +1,15 @@
+---
+area: ai
+tags: [tema/investigacion, area/trabajo]
+---
+
 # IA Agents
 
 ## Conceptos
 - Agente AI: sistema que percibe, decide y actúa
 - Tool calling: capacidad de usar herramientas externas
 - Memory: contexto corto y largo plazo
-- Planning:分解 tareas en sub-tareas
+- Planning: descomponer tareas en sub-tareas
 
 ## Frameworks
 - LangGraph — grafos de estados para agentes
@@ -17,5 +22,10 @@
 - OpenAI Functions
 - LangChain tools
 
-## Tags
-#tema #ia #agents
+## Notas relacionadas
+
+```dataview
+LIST
+FROM "Proyectos"
+WHERE contains(tags, "#proyecto/activo") AND contains(file.name, "agent")
+```

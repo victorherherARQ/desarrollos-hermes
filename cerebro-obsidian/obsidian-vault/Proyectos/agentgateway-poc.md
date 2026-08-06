@@ -1,3 +1,10 @@
+---
+estado: activo
+fecha_inicio: 2025-01-01
+personas: [Victor]
+tags: [proyecto/activo, area/trabajo]
+---
+
 # agentgateway-poc
 
 ## Descripción
@@ -13,5 +20,10 @@ Gateway de agentes AI (Linux Foundation / solo.io) para conectar agentes con LLM
 ## Ubicación
 `/home/vhdez/desarrollos-hermes/agentgateway-poc/`
 
-## Tags
-#proyecto #ai #agents
+## Tareas asociadas
+
+```dataview
+LIST
+FROM "Tareas"
+WHERE contains(proyecto, "agentgateway-poc")
+```
