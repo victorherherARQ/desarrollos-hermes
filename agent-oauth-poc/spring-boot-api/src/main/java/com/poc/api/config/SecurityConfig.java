@@ -1,6 +1,8 @@
 package com.poc.api.config;
 
+import com.poc.api.ciba.CibaTokenValidatorAdapter;
 import com.poc.api.security.JwtAudienceValidator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -86,6 +88,9 @@ public class SecurityConfig {
      * <ul>
      *   <li>Default validators de Spring (exp, nbf, iss)</li>
      *   <li>Nuestro {@link JwtAudienceValidator}</li>
+     *   <li><b>Si {@code ciba.enabled=true}</b>: {@link CibaTokenValidatorAdapter}
+     *       (CTI replay prevention, auth_req_id binding). Por defecto NO se enchufa
+     *       (mantiene compatibilidad con B2C).</li>
      * </ul>
      *
      * <p>Sin este @Bean, Spring auto-configura un {@code NimbusJwtDecoder} sólo
@@ -93,14 +98,24 @@ public class SecurityConfig {
      */
     @Bean
     public JwtDecoder jwtDecoder(
-            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri
+            @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String issuerUri,
+            ObjectProvider<CibaTokenValidatorAdapter> cibaValidatorProvider,
+            @Value("${ciba.enabled:false}") boolean cibaEnabled
     ) {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
 
         OAuth2TokenValidator<Jwt> defaults = JwtValidators.createDefaultWithIssuer(issuerUri);
         OAuth2TokenValidator<Jwt> audience = new JwtAudienceValidator(EXPECTED_AUDIENCE);
 
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaults, audience));
+        OAuth2TokenValidator<Jwt> ciba = cibaEnabled
+            ? cibaValidatorProvider.getObject()
+            : null;
+
+        if (ciba != null) {
+            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaults, audience, ciba));
+        } else {
+            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaults, audience));
+        }
         return decoder;
     }
 

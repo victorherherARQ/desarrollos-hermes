@@ -49,6 +49,21 @@
             <version>4.4.0</version>
         </dependency>
 
+        <!-- Caffeine cache para CTI replay prevention (CIBA flow).
+             Migrado de ciba-callagent/ en ADR-001 (2026-08-07). -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
+        <!-- WebClient para CIBA client (CIBA flow a Keycloak).
+             Solo si se levanta ciba-client-spring/. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Actuator (/actuator/health) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
