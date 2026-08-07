@@ -1,0 +1,117 @@
+{
+  "title": "CIBA Flow — Client Initiated Backchannel Authentication (agent + Keycloak)",
+  "actors": [
+    { "id": "user",     "label": "User (testuser)",            "type": "external" },
+    { "id": "agent",    "label": "AI Agent (Hermes)",           "type": "internal" },
+    { "id": "client",   "label": "CIBA Client (:8081)",         "type": "internal" },
+    { "id": "idp",      "label": "Keycloak (IdP) :8181",        "type": "internal" },
+    { "id": "phone",    "label": "Phone (Authenticator App)",   "type": "external" },
+    { "id": "rs",       "label": "Resource Server (:8082)",     "type": "internal" }
+  ],
+  "steps": [
+    {
+      "n": 1,
+      "from": "agent",
+      "to": "client",
+      "label": "POST /agent/request",
+      "detail": "User invokes agent: 'Read my calendar'. Agent calls client with {userId, action: calendar_list, scope: calendar.read}.",
+      "duration_ms": 50
+    },
+    {
+      "n": 2,
+      "from": "client",
+      "to": "idp",
+      "label": "CIBA auth_request (poll mode)",
+      "detail": "POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/authreq\nclient_id=ciba-agent\nclient_secret=***\nlogin_hint=testuser\nscope=openid profile calendar.read\nbinding_message=Read+your+calendar",
+      "duration_ms": 800
+    },
+    {
+      "n": 3,
+      "from": "idp",
+      "to": "client",
+      "label": "auth_req_id",
+      "detail": "Response: { auth_req_id: \"eyJ...\", expires_in: 120, interval: 5 }",
+      "duration_ms": 50
+    },
+    {
+      "n": 4,
+      "from": "client",
+      "to": "agent",
+      "label": "requestId (PENDING)",
+      "detail": "Client returns requestId with status=PENDING. Agent stores it in state machine (ConcurrentHashMap → Redis in P2).",
+      "duration_ms": 30
+    },
+    {
+      "n": 5,
+      "from": "idp",
+      "to": "phone",
+      "label": "Push notification",
+      "detail": "Keycloak sends push to user's authenticator app: 'AI agent requests calendar.read'.",
+      "duration_ms": 2000
+    },
+    {
+      "n": 6,
+      "from": "phone",
+      "to": "idp",
+      "label": "User approves",
+      "detail": "User taps 'Approve' (or denies). In ping mode, Keycloak calls client's /ciba/ping-callback.",
+      "duration_ms": 5000
+    },
+    {
+      "n": 7,
+      "from": "client",
+      "to": "idp",
+      "label": "Token request (poll mode)",
+      "detail": "POST /realms/ciba-realm/protocol/openid-connect/ext/ciba/auth/token\ngrant_type=urn:openid:params:grant-type:ciba\nauth_req_id=eyJ...\nEvery 5s until APPROVED or timeout.",
+      "duration_ms": 5000
+    },
+    {
+      "n": 8,
+      "from": "idp",
+      "to": "client",
+      "label": "access_token (CTI + auth_req_id)",
+      "detail": "Response: { access_token, cti: \"abc123\", auth_req_id, scope: \"calendar.read\", expires_in: 300 }",
+      "duration_ms": 100
+    },
+    {
+      "n": 9,
+      "from": "agent",
+      "to": "client",
+      "label": "POST /agent/execute/{rid}",
+      "detail": "Agent asks client to execute the action with the now-approved token.",
+      "duration_ms": 50
+    },
+    {
+      "n": 10,
+      "from": "client",
+      "to": "rs",
+      "label": "GET /api/calendar/events",
+      "detail": "Resource Server validates JWT:\n- Signature (JWKS from Keycloak)\n- aud = spring-boot-api\n- cti NOT in replay cache (Caffeine 24h TTL, 10k entries)\n- scope contains calendar.read",
+      "duration_ms": 200
+    },
+    {
+      "n": 11,
+      "from": "rs",
+      "to": "client",
+      "label": "Calendar events",
+      "detail": "Response: 200 OK with [ { id, title, start, end }, ... ]\nCTI recorded in cache — replay returns 401 cti_replay.",
+      "duration_ms": 100
+    },
+    {
+      "n": 12,
+      "from": "client",
+      "to": "agent",
+      "label": "success: true (data)",
+      "detail": "Client returns to agent the calendar data. Agent presents to user.",
+      "duration_ms": 30
+    }
+  ],
+  "metadata": {
+    "spec": "OpenID Connect CIBA Core 1.0",
+    "modes": ["poll (default, 5-15s latency)", "ping (<1s, requires callback)"],
+    "scopes_supported": ["calendar.read", "calendar.create", "email.send", "user.read"],
+    "replay_prevention": "Caffeine cache, 24h TTL, 10k entries",
+    "keycloak_version": ">= 26.6 (H2 bug fixed in 26.6)",
+    "source": "agent-oauth-poc/ + ciba-callagent/ (consolidated per ADR-001)"
+  }
+}
