@@ -41,3 +41,15 @@ logging:
     com.poc.api: DEBUG
     org.springframework.security: INFO
     org.springframework.boot.autoconfigure: WARN
+
+# ──────────────────────────────────────────────────────────────
+# CIBA (OpenID Connect Client Initiated Backchannel Authentication)
+# Activar SOLO en realms Keycloak 26.6+ (no compatible con Azure B2C).
+# Migrado desde ciba-callagent/ en ADR-001 (2026-08-07).
+# ──────────────────────────────────────────────────────────────
+ciba:
+  enabled: ${CIBA_ENABLED:false}             # default false para B2C compat
+  cti:
+    cache:
+      max-size: 10000                        # entradas (Caffeine)
+      expire-after-hours: 24                 # TTL ventana de replay
