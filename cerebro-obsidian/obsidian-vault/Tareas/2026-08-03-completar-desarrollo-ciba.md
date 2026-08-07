@@ -1,15 +1,36 @@
 ---
 fecha_creada: 2026-08-03
+fecha_avanzada: 2026-08-07
 prioridad: alta
 persona: Victor
-proyecto: ciba-callagent
+proyecto: agent-oauth-poc
 fecha_limite: ""
-tags: [tarea/pendiente, prioridad/alta, area/trabajo]
+tags: [tarea/en-curso, prioridad/alta, area/trabajo]
 ---
 
-# Completar desarrollo CIBA con Keycloak
+# Completar desarrollo CIBA con Keycloak (FASE 1/5)
 
-> **⚠️ Hallazgo crítico (2026-08-06)**: La tarea está **mal nombrada**. El proyecto `agent-oauth-poc/` **NO contiene nada de CIBA** (lo descartó por incompatibilidad con B2C). El verdadero proyecto CIBA es **`ciba-callagent/`** (Spring Boot 3.3.4, separado, en el mismo `/home/vhdez/desarrollos-hermes/`).
+> **✅ Avance 2026-08-07**: ADR-001 publicado, Resource Server migrado, skill generalizada. Detalle completo en [`actuaciones/2026-08-07-ciba-consolidacion-fase-1.md`](../actuaciones/2026-08-07-ciba-consolidacion-fase-1.md).
+>
+> **Bloqueo actual**: `/home/vhdez/desarrollos-hermes/agent-oauth-poc/spring-boot-api/target/` es root-owned. Necesito sudo o que Víctor lo arregle para Fase 2 (docker E2E).
+
+## 📊 Estado de las 5 fases
+
+| Fase | Descripción | Estado | Commit |
+|------|-------------|--------|--------|
+| 0 | ADR consolidación | ✅ | `833c72c` |
+| 1 | Migrar Resource Server | ✅ | `b58baff` |
+| 2 | Validar E2E con docker | ⏸️ Bloqueado | — |
+| 3 | Generalizar skill `oauth-flow-html` | ✅ | `0b4b03d` |
+| 4 | Eliminar `ciba-callagent/` | ⏸️ Pospuesto | — |
+
+## 🔑 Decisiones Víctor 2026-08-07
+
+1. ✅ **Consolidar CIBA en `agent-oauth-poc/`** (revierte parcialmente v2)
+2. ✅ **Skill `oauth-flow-html`**: restaurar + generalizar para opencode
+3. ✅ **`poll` y `ping` mode**: ambos, documentados
+4. ⏸️ **`ciba-callagent/` se queda donde está** hasta validar
+5. ✅ **Keycloak 26.6+** como IdP objetivo
 
 ## Estado real del código
 
