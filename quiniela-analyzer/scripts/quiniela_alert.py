@@ -2,15 +2,11 @@
 """Cron job: monitoriza propuestas de La Quiniela entre semana.
 
 Comportamiento:
-  - Cada día (lun-vie) verifica si hay jornada con finde próximo
-  - Si la propuesta NO está publicada o el AvgH está desactualizado (>24h),
-    avisa a Víctor para que la pida/regeneres
-  - Si está al día: silencio (no envía nada)
-
-Casos:
-  - finde = sábado+domingo+lunes (15-ago a 17-ago)
-  - ventana aviso = lunes 12-ago (3 días antes) hasta viernes 14-ago
-  - después de las 18:00 del viernes: silencio (ya no hay tiempo)
+  - Cada día (lun-vie) verifica si la quiniela oficial está publicada
+  - Si NO está publicada la quiniela → silencio
+  - Si está publicada pero NO hay propuesta → avisa (alta)
+  - Si hay propuesta pero desactualizada (>24h) → avisa (media)
+  - Si está al día → silencio
 
 Uso:
   python3 scripts/quiniela_alert.py
@@ -30,38 +26,37 @@ DB = ROOT / "data" / "quiniela.db"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger(__name__)
 
-MAX_AGE_HOURS = 24  # propuesta de más de 24h se considera desactualizada
+MAX_AGE_HOURS = 24
+
+
+def find_lae_quiniela(conn, saturday):
+    """¿Está publicada la quiniela oficial en lae_quiniela?"""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) FROM lae_quiniela WHERE match_date = ?",
+        (saturday.isoformat(),),
+    )
+    r = cur.fetchone()
+    return r and r[0] > 0
 
 
 def next_weekend(today: date) -> tuple[date, date]:
-    """Devuelve (sábado, lunes) del próximo fin de semana.
-
-    - Lunes a viernes → próximo sábado
-    - Sábado o domingo → mismo finde (sábado actual)
-    - Lunes post-finde → próximo sábado
-    """
-    # lunes=0, ..., sábado=5, domingo=6
+    """Devuelve (sábado, lunes) del finde actual o próximo."""
     weekday = today.weekday()
-    if weekday == 5:  # sábado
+    if weekday == 5:
         saturday = today
-    elif weekday == 6:  # domingo
+    elif weekday == 6:
         saturday = today - timedelta(days=1)
     else:
-        # lunes(0), martes(1), miércoles(2), jueves(3), viernes(4)
         days_to_saturday = 5 - weekday
         saturday = today + timedelta(days=days_to_saturday)
     monday = saturday + timedelta(days=2)
     return saturday, monday
 
 
-def find_weekend_jornada(conn: sqlite3.Connection, today: date):
-    """Encuentra la jornada del finde en curso o del próximo.
-
-    - Si hoy cae en [sábado, lunes] del finde → jornada actual
-    - Si hoy es martes o posterior → jornada del próximo finde
-    """
+def find_weekend_jornada(conn, today):
+    """Devuelve (jornada, season, fecha_sabado, fecha_lunes) del finde actual o próximo."""
     cur = conn.cursor()
-    # 1) Buscar jornada donde fecha_lunes >= hoy (aún no cerrada)
     cur.execute(
         """
         SELECT jornada, season, fecha_sabado, fecha_lunes, proposal_sent, alert_sent
@@ -75,8 +70,6 @@ def find_weekend_jornada(conn: sqlite3.Connection, today: date):
     row = cur.fetchone()
     if row:
         return row
-
-    # 2) Si no hay, buscar la primera jornada futura
     cur.execute(
         """
         SELECT jornada, season, fecha_sabado, fecha_lunes, proposal_sent, alert_sent
@@ -90,13 +83,12 @@ def find_weekend_jornada(conn: sqlite3.Connection, today: date):
     return cur.fetchone()
 
 
-def proposal_status(conn: sqlite3.Connection, jornada: int, season: str) -> dict:
-    """Devuelve el estado de la propuesta: cuántas tiene, cuántas obsoletas, etc."""
+def proposal_status(conn, jornada, season):
+    """Estado de la propuesta."""
     cur = conn.cursor()
     cur.execute(
         """
         SELECT COUNT(*) AS total,
-               SUM(CASE WHEN generated_at IS NULL THEN 1 ELSE 0 END) AS null_date,
                MAX(generated_at) AS last_generated
         FROM quiniela_proposals
         WHERE jornada = ? AND season = ?
@@ -106,9 +98,8 @@ def proposal_status(conn: sqlite3.Connection, jornada: int, season: str) -> dict
     row = cur.fetchone()
     if not row or row[0] == 0:
         return {"exists": False, "total": 0, "last_generated": None, "age_hours": None}
-
     total = row[0]
-    last_gen = row[2]
+    last_gen = row[1]
     age_hours = None
     if last_gen:
         try:
@@ -116,7 +107,6 @@ def proposal_status(conn: sqlite3.Connection, jornada: int, season: str) -> dict
             age_hours = (datetime.now() - last_gen_dt).total_seconds() / 3600
         except (ValueError, AttributeError):
             pass
-
     return {
         "exists": True,
         "total": total,
@@ -129,8 +119,8 @@ def proposal_status(conn: sqlite3.Connection, jornada: int, season: str) -> dict
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--dry-run", action="store_true", help="solo mostrar, no actualizar BD")
-    p.add_argument("--today", default=None, help="fecha de hoy (YYYY-MM-DD), default: hoy")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--today", default=None, help="YYYY-MM-DD")
     args = p.parse_args()
 
     today = date.fromisoformat(args.today) if args.today else date.today()
@@ -139,56 +129,63 @@ def main() -> None:
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
 
-    # Buscar próximo finde
     match = find_weekend_jornada(conn, today)
     if not match:
-        print(f"📅 No hay jornada programada en las próximas semanas")
-        print(f"   Hoy: {today}")
+        print("📅 No hay jornada programada")
         conn.close()
         return
 
     jornada, season, fs, fl, proposal_sent, alert_sent = match
-    log.info(f"Encontrada J{jornada} ({season}): sábado {fs} → lunes {fl}")
+    log.info(f"J{jornada} ({season}): sábado {fs} → lunes {fl}")
 
-    status = proposal_status(conn, jornada, season)
     saturday = date.fromisoformat(fs)
     days_to_saturday = (saturday - today).days
 
-    # Lógica principal:
-    # 1. Si no hay propuesta → avisar (alta prioridad)
-    # 2. Si hay propuesta pero es vieja (>24h) → avisar (recordatorio)
-    # 3. Si está al día → silencio (no enviar)
+    lae_published = find_lae_quiniela(conn, saturday)
+    log.info(f"LAE quiniela publicada: {lae_published}")
 
-    msg_lines = []
+    status = proposal_status(conn, jornada, season)
 
+    # 1. LAE aún no ha publicado la quiniela
+    if not lae_published:
+        print(f"⏳ J{jornada} ({season}) — LAE aún no ha publicado la quiniela oficial")
+        print(f"   Sábado {fs} → Lunes {fl} (en {days_to_saturday} días)")
+        print(f"   Cuando LAE la publique, el cron te avisará")
+        conn.close()
+        return
+
+    # 2. Publicada, sin propuesta
     if not status["exists"]:
-        msg_lines.append(f"⚠️ **PROPUESTA QUINIELA PENDIENTE**")
-        msg_lines.append(f"")
-        msg_lines.append(f"📅 J{jornada} ({season}) empieza en {days_to_saturday} días")
-        msg_lines.append(f"   Sábado {fs} → Lunes {fl}")
-        msg_lines.append(f"")
-        msg_lines.append(f"❌ NO hay propuesta generada todavía")
-        msg_lines.append(f"")
-        msg_lines.append(f"👉 Pídemela con: 'hazme la propuesta quiniela jornada {jornada}'")
-        msg_lines.append(f"   O ejecuta: `python3 scripts/quiniela_proposal.py --matchday {jornada}`")
+        msg_lines = [
+            "⚠️ **QUINIELA OFICIAL PUBLICADA**",
+            "",
+            f"📅 J{jornada} ({season}) empieza en {days_to_saturday} días",
+            f"   Sábado {fs} → Lunes {fl}",
+            "   ✅ LAE ya publicó los 15 partidos",
+            "   ❌ NO hay propuesta generada",
+            "",
+            f"👉 Pídemela con: 'hazme la propuesta quiniela jornada {jornada}'",
+            f"   O ejecuta: `python3 scripts/quiniela_proposal.py --matchday {jornada}`",
+        ]
         priority = "alta"
+        msg = "\n".join(msg_lines)
     elif status["needs_update"]:
-        msg_lines.append(f"⏰ **PROPUESTA QUINIELA DESACTUALIZADA**")
-        msg_lines.append(f"")
-        msg_lines.append(f"📅 J{jornada} ({season}) empieza en {days_to_saturday} días")
-        msg_lines.append(f"   Sábado {fs} → Lunes {fl}")
-        msg_lines.append(f"")
         age_str = f"{status['age_hours']:.1f}h" if status['age_hours'] is not None else "?"
-        msg_lines.append(f"🕐 Última actualización: {age_str} (>24h)")
-        msg_lines.append(f"   Total partidos: {status['total']}")
-        msg_lines.append(f"   AvgH puede haber cambiado desde entonces")
-        msg_lines.append(f"")
-        msg_lines.append(f"👉 Pide regenerar con: 'regenera la propuesta quiniela J{jornada}'")
+        msg_lines = [
+            "⏰ **PROPUESTA QUINIELA DESACTUALIZADA**",
+            "",
+            f"📅 J{jornada} ({season}) empieza en {days_to_saturday} días",
+            f"   Sábado {fs} → Lunes {fl}",
+            f"   🕐 Última actualización: {age_str} (>24h)",
+            f"   Total partidos: {status['total']}",
+            "",
+            f"👉 Pide regenerar con: 'regenera la propuesta quiniela J{jornada}'",
+        ]
         priority = "media"
+        msg = "\n".join(msg_lines)
     else:
-        # Propuesta está al día
+        # Al día
         if days_to_saturday <= 0:
-            # Ya pasó el finde o estamos en él
             print(f"✅ J{jornada} ({season}) ya jugada o en juego ({fs})")
             print(f"   Propuesta publicada, generada hace {status['age_hours']:.1f}h")
         else:
@@ -198,12 +195,10 @@ def main() -> None:
         conn.close()
         return
 
-    # Mostrar el aviso
-    print("\n".join(msg_lines))
+    print(msg)
     print()
     print(f"   (Prioridad: {priority})")
 
-    # Marcar como alert_sent solo si no estaba ya marcado
     if not alert_sent and not args.dry_run:
         cur.execute(
             """
